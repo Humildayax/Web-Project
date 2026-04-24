@@ -1,0 +1,18 @@
+# Secretos / entornos locales
+.env
+.env.local
+*.local.env
+
+# Binarios Go
+/bin/
+/tmp/
+security-portal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
