@@ -9,8 +9,8 @@ import (
 )
 
 // NewPool crea y verifica un pool de conexiones a Postgres.
-// A diferencia de la versión previa (variable global `DB`), aquí el pool
-// se devuelve para inyectarse explícitamente donde haga falta.
+// No es un repositorio en sí: es la fábrica del pool que después
+// inyectamos en NewIncidentRepository (y en cualquier otro repo).
 func NewPool(ctx context.Context, cfg config.DBConfig) (*pgxpool.Pool, error) {
 	pc, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {

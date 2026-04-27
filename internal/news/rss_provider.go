@@ -1,4 +1,4 @@
-package repository
+package news
 
 import (
 	"context"
@@ -8,23 +8,26 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
-type NewsProvider interface {
+// Provider abstrae cualquier fuente externa de noticias (RSS, API, etc.).
+// Vive fuera de internal/repository porque NO es persistencia: es un gateway
+// hacia un sistema externo, conceptualmente equivalente a internal/jira.
+type Provider interface {
 	FetchNews(ctx context.Context) ([]models.NewsItem, error)
 }
 
-type rssNewsProvider struct {
+type rssProvider struct {
 	feedURL string
 	limit   int
 }
 
-func NewRSSNewsProvider(url string, limit int) NewsProvider {
+func NewRSSProvider(url string, limit int) Provider {
 	if limit <= 0 {
 		limit = 5
 	}
-	return &rssNewsProvider{feedURL: url, limit: limit}
+	return &rssProvider{feedURL: url, limit: limit}
 }
 
-func (p *rssNewsProvider) FetchNews(ctx context.Context) ([]models.NewsItem, error) {
+func (p *rssProvider) FetchNews(ctx context.Context) ([]models.NewsItem, error) {
 	fp := gofeed.NewParser()
 	feed, err := fp.ParseURLWithContext(p.feedURL, ctx)
 	if err != nil {
@@ -36,7 +39,7 @@ func (p *rssNewsProvider) FetchNews(ctx context.Context) ([]models.NewsItem, err
 		n = p.limit
 	}
 
-	news := make([]models.NewsItem, 0, n)
+	out := make([]models.NewsItem, 0, n)
 	for i := 0; i < n; i++ {
 		item := feed.Items[i]
 
@@ -48,7 +51,7 @@ func (p *rssNewsProvider) FetchNews(ctx context.Context) ([]models.NewsItem, err
 			published = item.Published
 		}
 
-		news = append(news, models.NewsItem{
+		out = append(out, models.NewsItem{
 			Title:       item.Title,
 			Description: item.Description,
 			Link:        item.Link,
@@ -56,5 +59,5 @@ func (p *rssNewsProvider) FetchNews(ctx context.Context) ([]models.NewsItem, err
 			Source:      feed.Title,
 		})
 	}
-	return news, nil
+	return out, nil
 }

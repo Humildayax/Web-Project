@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"security-portal/internal/dto"
+	"security-portal/internal/models"
 	"security-portal/internal/services"
 )
 
@@ -46,11 +47,11 @@ func (h *IncidentHandler) CreateIncident(w http.ResponseWriter, r *http.Request)
 	}
 
 	incident := req.ToModel()
-	// Sin auth aún: al menos registramos de dónde vino el reporte.
-	incident.Metadata = map[string]any{
-		"source_ip":   clientIP(r),
-		"user_agent":  r.UserAgent(),
-		"received_at": time.Now().UTC().Format(time.RFC3339),
+	// Sin auth aún: registramos el contexto operativo del reporte.
+	incident.Metadata = &models.IncidentMetadata{
+		SourceIP:   clientIP(r),
+		UserAgent:  r.UserAgent(),
+		ReceivedAt: time.Now().UTC(),
 	}
 
 	if err := h.service.ProcessNewIncident(r.Context(), incident); err != nil {

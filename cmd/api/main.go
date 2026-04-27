@@ -12,6 +12,7 @@ import (
 	"security-portal/internal/config"
 	"security-portal/internal/handlers"
 	"security-portal/internal/jira"
+	"security-portal/internal/news"
 	"security-portal/internal/repository"
 	"security-portal/internal/services"
 
@@ -91,7 +92,7 @@ func wireDependencies(cfg config.Config, pool *pgxpool.Pool, jiraClient jira.Cli
 	incidentRepo := repository.NewIncidentRepository(pool)
 	incidentSvc := services.NewIncidentService(incidentRepo, jiraClient)
 
-	newsProvider := repository.NewRSSNewsProvider(cfg.News.FeedURL, cfg.News.Limit)
+	newsProvider := news.NewRSSProvider(cfg.News.FeedURL, cfg.News.Limit)
 	newsSvc := services.NewNewsService(newsProvider, cfg.News.CacheTTL)
 
 	return dependencies{

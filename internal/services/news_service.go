@@ -6,18 +6,18 @@ import (
 	"time"
 
 	"security-portal/internal/models"
-	"security-portal/internal/repository"
+	"security-portal/internal/news"
 )
 
 type NewsService struct {
-	provider   repository.NewsProvider
+	provider   news.Provider
 	cache      []models.NewsItem
 	lastUpdate time.Time
 	mu         sync.RWMutex
 	cacheTTL   time.Duration
 }
 
-func NewNewsService(provider repository.NewsProvider, ttl time.Duration) *NewsService {
+func NewNewsService(provider news.Provider, ttl time.Duration) *NewsService {
 	if ttl <= 0 {
 		ttl = 15 * time.Minute
 	}
@@ -40,7 +40,7 @@ func (s *NewsService) GetNews(ctx context.Context) ([]models.NewsItem, error) {
 		return s.cache, nil
 	}
 
-	news, err := s.provider.FetchNews(ctx)
+	items, err := s.provider.FetchNews(ctx)
 	if err != nil {
 		if len(s.cache) > 0 {
 			return s.cache, nil
@@ -48,7 +48,7 @@ func (s *NewsService) GetNews(ctx context.Context) ([]models.NewsItem, error) {
 		return nil, err
 	}
 
-	s.cache = news
+	s.cache = items
 	s.lastUpdate = time.Now()
 	return s.cache, nil
 }

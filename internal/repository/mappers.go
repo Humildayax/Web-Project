@@ -1,20 +1,29 @@
 package repository
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"security-portal/internal/db"
 	"security-portal/internal/models"
+
+	"github.com/google/uuid"
 )
 
 // toDomain convierte el modelo de persistencia (db.Incident, generado por sqlc
-// con tipos pgtype.*) al modelo de dominio (models.Incident) que consumen
-// services y handlers.
+// con id como string y tipos pgtype.*) al modelo de dominio (models.Incident).
 //
 // Esta función es la frontera entre la capa de repositorio y el resto del
-// sistema: cualquier divergencia futura entre los modelos (campos solo-DB,
+// sistema: cualquier divergencia entre los modelos (campos solo-DB,
 // versiones, soft-delete, etc.) se absorbe acá sin tocar services.
-func toDomain(row db.Incident) models.Incident {
+func toDomain(row db.Incident) (models.Incident, error) {
+	id, err := uuid.Parse(row.ID)
+	if err != nil {
+		return models.Incident{}, fmt.Errorf("uuid inválido %q en DB: %w", row.ID, err)
+	}
+
 	inc := models.Incident{
-		ID:          row.ID,
+		ID:          id,
 		Title:       row.Title,
 		Description: row.Description,
 		Author:      row.Author,
@@ -24,11 +33,12 @@ func toDomain(row db.Incident) models.Incident {
 	if row.JiraIssueKey.Valid {
 		inc.JiraIssueKey = row.JiraIssueKey.String
 	}
-	// La metadata se mantiene como []byte crudo a propósito: el repo no debería
-	// imponer una forma. Si un consumer quiere leerla como objeto, json.Unmarshal
-	// se hace en services o en el handler — no acá.
 	if len(row.Metadata) > 0 {
-		inc.Metadata = row.Metadata
+		var m models.IncidentMetadata
+		if err := json.Unmarshal(row.Metadata, &m); err != nil {
+			return inc, fmt.Errorf("metadata unmarshal (id=%s): %w", id, err)
+		}
+		inc.Metadata = &m
 	}
-	return inc
+	return inc, nil
 }

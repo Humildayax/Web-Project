@@ -4,25 +4,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"security-portal/internal/models"
 )
 
 // CreateIncidentRequest es la entrada del endpoint POST /api/incidents.
-// Las reglas `validate` las interpreta go-playground/validator.
 type CreateIncidentRequest struct {
 	Title       string `json:"title"       validate:"required,min=3,max=255"`
 	Description string `json:"description" validate:"required,min=5,max=10000"`
 	Author      string `json:"author"      validate:"omitempty,max=100"`
 }
 
-// Normalize limpia espacios y aplica defaults antes de validar.
 func (r *CreateIncidentRequest) Normalize() {
 	r.Title = strings.TrimSpace(r.Title)
 	r.Description = strings.TrimSpace(r.Description)
 	r.Author = strings.TrimSpace(r.Author)
 }
 
-// ToModel mapea el DTO al modelo de dominio que consumen services y repository.
 func (r CreateIncidentRequest) ToModel() *models.Incident {
 	author := r.Author
 	if author == "" {
@@ -36,9 +35,9 @@ func (r CreateIncidentRequest) ToModel() *models.Incident {
 }
 
 // IncidentResponse es la representación pública del incidente.
-// No expone metadata (IP, user-agent), retries ni last_sync_attempt.
+// No expone metadata interna (IP, user-agent), retries ni last_sync_attempt.
 type IncidentResponse struct {
-	ID           string    `json:"id"`
+	ID           uuid.UUID `json:"id"`
 	Title        string    `json:"title"`
 	Description  string    `json:"description"`
 	Author       string    `json:"author"`
