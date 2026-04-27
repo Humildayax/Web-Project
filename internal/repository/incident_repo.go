@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"time"
 
+	"security-portal/internal/db"
 	"security-portal/internal/models"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// IncidentRepository es la interfaz que ven services. Trabaja siempre con
+// models.Incident (dominio); los tipos generados por sqlc (db.Incident) no
+// salen de este paquete.
 type IncidentRepository interface {
 	Create(ctx context.Context, incident *models.Incident) error
 	MarkSynced(ctx context.Context, id, jiraKey string) error
@@ -18,11 +23,11 @@ type IncidentRepository interface {
 }
 
 type postgresIncidentRepo struct {
-	db *pgxpool.Pool
+	q *db.Queries
 }
 
-func NewIncidentRepository(db *pgxpool.Pool) IncidentRepository {
-	return &postgresIncidentRepo{db: db}
+func NewIncidentRepository(pool *pgxpool.Pool) IncidentRepository {
+	return &postgresIncidentRepo{q: db.New(pool)}
 }
 
 const opTimeout = 5 * time.Second
@@ -40,70 +45,54 @@ func (r *postgresIncidentRepo) Create(ctx context.Context, incident *models.Inci
 		metadataBytes = b
 	}
 
-	const q = `
-		INSERT INTO incidents (title, description, author, jira_sync, metadata)
-		VALUES ($1, $2, $3, FALSE, $4)
-		RETURNING id, created_at
-	`
-	return r.db.QueryRow(ctx, q,
-		incident.Title, incident.Description, incident.Author, metadataBytes,
-	).Scan(&incident.ID, &incident.CreatedAt)
+	row, err := r.q.CreateIncident(ctx, db.CreateIncidentParams{
+		Title:       incident.Title,
+		Description: incident.Description,
+		Author:      incident.Author,
+		Metadata:    metadataBytes,
+	})
+	if err != nil {
+		return err
+	}
+
+	// El servicio le pasó un puntero: solo actualizamos lo que la DB generó.
+	incident.ID = row.ID
+	incident.CreatedAt = row.CreatedAt
+	incident.JiraSync = row.JiraSync
+	return nil
 }
 
 func (r *postgresIncidentRepo) MarkSynced(ctx context.Context, id, jiraKey string) error {
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 
-	const q = `
-		UPDATE incidents
-		SET jira_sync = TRUE,
-		    jira_issue_key = $2,
-		    last_sync_attempt = NOW()
-		WHERE id = $1
-	`
-	_, err := r.db.Exec(ctx, q, id, jiraKey)
-	return err
+	return r.q.MarkIncidentSynced(ctx, db.MarkIncidentSyncedParams{
+		ID:           id,
+		JiraIssueKey: pgtype.Text{String: jiraKey, Valid: true},
+	})
 }
 
 func (r *postgresIncidentRepo) MarkSyncFailed(ctx context.Context, id string) error {
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
-
-	const q = `
-		UPDATE incidents
-		SET sync_retries = sync_retries + 1,
-		    last_sync_attempt = NOW()
-		WHERE id = $1
-	`
-	_, err := r.db.Exec(ctx, q, id)
-	return err
+	return r.q.MarkIncidentSyncFailed(ctx, id)
 }
 
 func (r *postgresIncidentRepo) ListPendingSync(ctx context.Context, maxRetries, limit int) ([]models.Incident, error) {
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 
-	const q = `
-		SELECT id, title, description, author, created_at
-		FROM incidents
-		WHERE jira_sync = FALSE
-		  AND sync_retries < $1
-		ORDER BY created_at ASC
-		LIMIT $2
-	`
-	rows, err := r.db.Query(ctx, q, maxRetries, limit)
+	rows, err := r.q.ListPendingSync(ctx, db.ListPendingSyncParams{
+		MaxRetries: int32(maxRetries),
+		Limit:      int32(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var out []models.Incident
-	for rows.Next() {
-		var inc models.Incident
-		if err := rows.Scan(&inc.ID, &inc.Title, &inc.Description, &inc.Author, &inc.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, inc)
+	out := make([]models.Incident, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toDomain(row))
 	}
-	return out, rows.Err()
+	return out, nil
 }

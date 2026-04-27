@@ -1,0 +1,23 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "db/queries"
+    schema: "scripts/init.sql"
+    gen:
+      go:
+        package: "db"
+        out: "internal/db"
+        sql_package: "pgx/v5"
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_exact_table_names: false
+        emit_empty_slices: true
+        emit_pointers_for_null_types: false
+        overrides:
+          # Trabajamos con UUID como string en el código de aplicación.
+          - column: "incidents.id"
+            go_type: "string"
+          # Metadata como bytes crudos; el servicio lo serializa/deserializa.
+          - column: "incidents.metadata"
+            go_type: "[]byte"

@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     author VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     -- Resiliencia JIRA
     jira_sync BOOLEAN NOT NULL DEFAULT FALSE,
@@ -18,12 +18,12 @@ CREATE TABLE IF NOT EXISTS incidents (
 );
 
 -- Índice parcial: solo indexa filas pendientes de sincronizar.
--- El worker hace `WHERE jira_sync = FALSE ORDER BY created_at`.
 CREATE INDEX IF NOT EXISTS idx_incidents_pending_sync
     ON incidents (created_at)
     WHERE jira_sync = FALSE;
 
--- Si tu volumen de Postgres ya existía antes de estos cambios, corre esto a mano:
+-- Si tu volumen de Postgres ya existía antes de estos cambios:
+-- ALTER TABLE incidents ALTER COLUMN created_at SET NOT NULL;
 -- ALTER TABLE incidents ADD COLUMN IF NOT EXISTS jira_issue_key TEXT;
 -- ALTER TABLE incidents ADD COLUMN IF NOT EXISTS sync_retries INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE incidents ADD COLUMN IF NOT EXISTS last_sync_attempt TIMESTAMP WITH TIME ZONE;

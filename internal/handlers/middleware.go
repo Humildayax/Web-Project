@@ -27,6 +27,7 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Logging es compatible con chi: tipo func(http.Handler) http.Handler.
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -57,12 +58,4 @@ func Recover(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
-}
-
-// Chain aplica middlewares en orden: el primero es el más externo.
-func Chain(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handler {
-	for i := len(mw) - 1; i >= 0; i-- {
-		h = mw[i](h)
-	}
-	return h
 }
