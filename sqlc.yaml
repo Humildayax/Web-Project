@@ -18,6 +18,5 @@ sql:
           # Trabajamos con UUID como string en el código de aplicación.
           - column: "incidents.id"
             go_type: "string"
-          # Metadata como bytes crudos; el servicio lo serializa/deserializa.
-          - column: "incidents.metadata"
-            go_type: "[]byte"
+          # Nota: incidents.metadata (JSONB) ya se mapea a []byte por defecto
+          # con sql_package: pgx/v5; no hace falta override.

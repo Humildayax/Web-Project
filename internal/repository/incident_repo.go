@@ -56,8 +56,9 @@ func (r *postgresIncidentRepo) Create(ctx context.Context, incident *models.Inci
 	}
 
 	// El servicio le pasó un puntero: solo actualizamos lo que la DB generó.
+	// row.CreatedAt es pgtype.Timestamptz; para el dominio queremos time.Time.
 	incident.ID = row.ID
-	incident.CreatedAt = row.CreatedAt
+	incident.CreatedAt = row.CreatedAt.Time
 	incident.JiraSync = row.JiraSync
 	return nil
 }
@@ -83,8 +84,10 @@ func (r *postgresIncidentRepo) ListPendingSync(ctx context.Context, maxRetries, 
 	defer cancel()
 
 	rows, err := r.q.ListPendingSync(ctx, db.ListPendingSyncParams{
-		MaxRetries: int32(maxRetries),
-		Limit:      int32(limit),
+		// sqlc nombra el field por la columna del WHERE (sync_retries < $1).
+		// El significado lógico es "máximo de retries permitido".
+		SyncRetries: int32(maxRetries),
+		Limit:       int32(limit),
 	})
 	if err != nil {
 		return nil, err

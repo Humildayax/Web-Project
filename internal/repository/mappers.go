@@ -18,7 +18,7 @@ func toDomain(row db.Incident) models.Incident {
 		Title:       row.Title,
 		Description: row.Description,
 		Author:      row.Author,
-		CreatedAt:   row.CreatedAt,
+		CreatedAt:   row.CreatedAt.Time, // pgtype.Timestamptz -> time.Time (NOT NULL en schema)
 		JiraSync:    row.JiraSync,
 	}
 	if row.JiraIssueKey.Valid {
