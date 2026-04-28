@@ -8,16 +8,21 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"security-portal/internal/config"
 	"security-portal/internal/handlers"
 	"security-portal/internal/jira"
+	migrator "security-portal/internal/migrate"
 	"security-portal/internal/news"
 	"security-portal/internal/repository"
 	"security-portal/internal/services"
+	"security-portal/migrations"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -53,6 +58,14 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	if cfg.DB.MigrateOnStart {
+		if err := migrator.Up(ctx, cfg.DB.DSN, migrations.FS); err != nil {
+			return err
+		}
+	} else {
+		slog.Info("migraciones deshabilitadas en arranque (MIGRATE_ON_START=false)")
+	}
+
 	pool, err := setupDB(ctx, cfg)
 	if err != nil {
 		return err
@@ -62,9 +75,12 @@ func run() error {
 	jiraClient := setupJiraClient(cfg)
 
 	deps := wireDependencies(cfg, pool, jiraClient)
-	go deps.worker.Run(ctx)
+	go deps.jiraWorker.Run(ctx)
+	if deps.retentionWorker != nil {
+		go deps.retentionWorker.Run(ctx)
+	}
 
-	router := buildRouter(deps, cfg.HTTP.AllowedOrigins)
+	router := buildRouter(deps, cfg.HTTP, pool)
 	return runServer(ctx, cfg, router)
 }
 
@@ -86,56 +102,109 @@ func setupJiraClient(cfg config.Config) jira.Client {
 	return jira.NewNoopClient()
 }
 
-// dependencies agrupa lo que arma run() y consumen router/worker.
+// dependencies agrupa lo que arma run() y consumen router/workers.
 type dependencies struct {
-	incidentH *handlers.IncidentHandler
-	newsH     *handlers.NewsHandler
-	worker    *services.JiraRetryWorker
+	incidentH       *handlers.IncidentHandler
+	newsH           *handlers.NewsHandler
+	jiraWorker      *services.JiraRetryWorker
+	retentionWorker *services.RetentionWorker // nil si retention deshabilitado
 }
 
 func wireDependencies(cfg config.Config, pool *pgxpool.Pool, jiraClient jira.Client) dependencies {
-	incidentRepo := repository.NewIncidentRepository(pool)
+	incidentRepo := repository.NewIncidentRepository(pool, cfg.DB.OpTimeout)
 	incidentSvc := services.NewIncidentService(incidentRepo, jiraClient)
 
 	newsProvider := news.NewRSSProvider(cfg.News.FeedURL, cfg.News.Limit)
 	newsSvc := services.NewNewsService(newsProvider, cfg.News.CacheTTL)
 
-	return dependencies{
-		incidentH: handlers.NewIncidentHandler(incidentSvc, cfg.HTTP.MaxBodyBytes),
-		newsH:     handlers.NewNewsHandler(newsSvc),
-		worker:    services.NewJiraRetryWorker(incidentRepo, jiraClient, cfg.Jira.RetryInterval, cfg.Jira.MaxRetries),
+	deps := dependencies{
+		incidentH:  handlers.NewIncidentHandler(incidentSvc, cfg.HTTP.MaxBodyBytes),
+		newsH:      handlers.NewNewsHandler(newsSvc),
+		jiraWorker: services.NewJiraRetryWorker(incidentRepo, jiraClient, cfg.Jira.RetryInterval, cfg.Jira.BaseBackoff, cfg.Jira.MaxRetries),
 	}
+	if cfg.Retention.IncidentMetadataMaxAge > 0 {
+		deps.retentionWorker = services.NewRetentionWorker(
+			incidentRepo,
+			cfg.Retention.IncidentMetadataMaxAge,
+			cfg.Retention.Interval,
+		)
+	} else {
+		slog.Warn("retention worker deshabilitado (INCIDENT_METADATA_MAX_AGE <= 0)")
+	}
+	return deps
 }
 
-func buildRouter(d dependencies, allowedOrigins []string) http.Handler {
+func buildRouter(d dependencies, httpCfg config.HTTPConfig, pool *pgxpool.Pool) http.Handler {
 	r := chi.NewRouter()
 
 	// Orden de middlewares (outer -> inner):
-	//   CORS    : atiende preflight OPTIONS y agrega headers a toda respuesta.
-	//   Logging : registra todas las requests (incluido OPTIONS).
-	//   Recover : captura panics del handler para que Logging logre loggear.
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   allowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Content-Type"},
-		ExposedHeaders:   []string{},
-		AllowCredentials: false,
-		MaxAge:           300, // segundos que el browser cachea el preflight
-	}))
+	//   RequestID : asigna un ID único por request, accesible vía
+	//               middleware.GetReqID(ctx).
+	//   CORS      : atiende preflight OPTIONS y agrega headers a toda
+	//               respuesta. Solo se registra si hay orígenes configurados;
+	//               en prod, mismo origen no requiere CORS.
+	//   Logging   : registra todas las requests (incluido OPTIONS) y propaga
+	//               el RequestID al header X-Request-Id de la respuesta.
+	//   Recover   : captura panics del handler para que Logging logre loggear.
+	r.Use(middleware.RequestID)
+	if len(httpCfg.AllowedOrigins) > 0 {
+		r.Use(cors.Handler(cors.Options{
+			AllowedOrigins:   httpCfg.AllowedOrigins,
+			AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Content-Type"},
+			ExposedHeaders:   []string{"X-Request-Id", "X-Cache"},
+			AllowCredentials: false,
+			MaxAge:           300, // segundos que el browser cachea el preflight
+		}))
+	} else {
+		slog.Info("CORS deshabilitado (ALLOWED_ORIGINS vacío)")
+	}
 	r.Use(handlers.Logging)
 	r.Use(handlers.Recover)
 
+	// Rate-limit por IP solo para el POST de incidentes. Usa el mismo
+	// criterio de IP del audit trail (X-Real-IP -> último XFF -> RemoteAddr)
+	// para que no se pueda evadir falsificando headers desde el cliente.
+	incidentLimiter := httprate.Limit(
+		httpCfg.IncidentRateLimit,
+		httpCfg.IncidentRateWindow,
+		httprate.WithKeyFuncs(func(r *http.Request) (string, error) {
+			return handlers.ClientIP(r), nil
+		}),
+	)
+
 	r.Route("/api", func(api chi.Router) {
-		// Healthcheck liviano: lo usan Docker, k8s probes y monitoreo externo.
-		// No depende de DB/JIRA a propósito (eso sería un readiness check distinto).
+		// /health = liveness. Responde 200 si el proceso está vivo. No depende
+		// de DB ni de servicios externos: si esto falla, el contenedor está
+		// muerto y hay que reiniciarlo.
 		api.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		})
-		api.Post("/incidents", d.incidentH.CreateIncident)
+		// /ready = readiness. 200 si la DB responde, 503 si no. Lo que
+		// usan k8s/load balancers para sacar la instancia del pool sin
+		// matarla.
+		api.Get("/ready", readinessHandler(pool))
+		api.With(incidentLimiter).Post("/incidents", d.incidentH.CreateIncident)
 		api.Get("/news", d.newsH.GetNews)
 	})
 	return r
+}
+
+func readinessHandler(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := pool.Ping(ctx); err != nil {
+			slog.Warn("readiness: ping a DB falló", "err", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"not_ready","reason":"database"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}
 }
 
 func runServer(ctx context.Context, cfg config.Config, h http.Handler) error {

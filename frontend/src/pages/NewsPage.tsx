@@ -8,12 +8,20 @@ export default function NewsPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getNews()
+    // AbortController evita dos cosas:
+    //  1. setState sobre componente desmontado si el usuario navega antes
+    //     de que llegue la respuesta.
+    //  2. En dev con StrictMode, React monta-desmonta-monta cada componente,
+    //     y sin abort el primer fetch sigue corriendo.
+    const ac = new AbortController()
+    getNews({ signal: ac.signal })
       .then(setItems)
       .catch((e: unknown) => {
+        if (e instanceof DOMException && e.name === 'AbortError') return
         if (e instanceof ApiError) setError(e.body)
         else setError('No se pudieron cargar las noticias')
       })
+    return () => ac.abort()
   }, [])
 
   return (

@@ -17,6 +17,14 @@ type NewsService struct {
 	cacheTTL   time.Duration
 }
 
+// NewsResult lleva las noticias y un flag Stale que indica si vienen del cache
+// porque el provider falló. El handler usa ese flag para emitir un header
+// X-Cache: stale (útil para alertas / debugging desde el cliente).
+type NewsResult struct {
+	Items []models.NewsItem
+	Stale bool
+}
+
 func NewNewsService(provider news.Provider, ttl time.Duration) *NewsService {
 	if ttl <= 0 {
 		ttl = 15 * time.Minute
@@ -24,11 +32,11 @@ func NewNewsService(provider news.Provider, ttl time.Duration) *NewsService {
 	return &NewsService{provider: provider, cacheTTL: ttl}
 }
 
-func (s *NewsService) GetNews(ctx context.Context) ([]models.NewsItem, error) {
+func (s *NewsService) GetNews(ctx context.Context) (NewsResult, error) {
 	s.mu.RLock()
 	if time.Since(s.lastUpdate) < s.cacheTTL && len(s.cache) > 0 {
 		defer s.mu.RUnlock()
-		return s.cache, nil
+		return NewsResult{Items: s.cache}, nil
 	}
 	s.mu.RUnlock()
 
@@ -37,18 +45,18 @@ func (s *NewsService) GetNews(ctx context.Context) ([]models.NewsItem, error) {
 
 	// Doble validación por si otra goroutine ya refrescó mientras esperábamos.
 	if time.Since(s.lastUpdate) < s.cacheTTL && len(s.cache) > 0 {
-		return s.cache, nil
+		return NewsResult{Items: s.cache}, nil
 	}
 
 	items, err := s.provider.FetchNews(ctx)
 	if err != nil {
 		if len(s.cache) > 0 {
-			return s.cache, nil
+			return NewsResult{Items: s.cache, Stale: true}, nil
 		}
-		return nil, err
+		return NewsResult{}, err
 	}
 
 	s.cache = items
 	s.lastUpdate = time.Now()
-	return s.cache, nil
+	return NewsResult{Items: s.cache}, nil
 }

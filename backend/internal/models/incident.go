@@ -24,4 +24,10 @@ type Incident struct {
 	JiraSync     bool              `json:"jira_sync"`
 	JiraIssueKey string            `json:"jira_issue_key,omitempty"`
 	Metadata     *IncidentMetadata `json:"metadata,omitempty"`
+
+	// SyncRetries es estado interno del worker (cuántas veces falló el push
+	// a JIRA). No se expone en respuestas HTTP — el DTO IncidentResponse no
+	// lo incluye y el json:"-" acá es defensa en profundidad por si alguien
+	// serializa el modelo crudo en el futuro.
+	SyncRetries int32 `json:"-"`
 }

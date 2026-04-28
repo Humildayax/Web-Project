@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	HTTP HTTPConfig
-	DB   DBConfig
-	Jira JiraConfig
-	News NewsConfig
+	HTTP      HTTPConfig
+	DB        DBConfig
+	Jira      JiraConfig
+	News      NewsConfig
+	Retention RetentionConfig
 }
 
 type HTTPConfig struct {
@@ -25,6 +26,12 @@ type HTTPConfig struct {
 	ShutdownTimeout   time.Duration
 	MaxBodyBytes      int64
 	AllowedOrigins    []string
+
+	// Rate-limit del endpoint POST /api/incidents.
+	// Se aplica por IP del cliente (ver handlers.clientIP) y se cuenta
+	// en una ventana deslizante de IncidentRateWindow.
+	IncidentRateLimit  int
+	IncidentRateWindow time.Duration
 }
 
 type DBConfig struct {
@@ -34,6 +41,16 @@ type DBConfig struct {
 	MaxConnLifetime   time.Duration
 	MaxConnIdleTime   time.Duration
 	HealthCheckPeriod time.Duration
+
+	// OpTimeout es el deadline por operación de repositorio (Create, Mark*,
+	// Claim*…). No aplica a operaciones largas como PurgeOldMetadata, que
+	// fija su propio timeout interno.
+	OpTimeout time.Duration
+
+	// MigrateOnStart controla si el binario aplica migraciones al arrancar.
+	// Default: true. Apagar en entornos donde las migraciones se corren
+	// por separado (CI, herramienta externa, operador).
+	MigrateOnStart bool
 }
 
 type JiraConfig struct {
@@ -46,12 +63,24 @@ type JiraConfig struct {
 	HTTPTimeout   time.Duration
 	RetryInterval time.Duration
 	MaxRetries    int
+	// BaseBackoff es el backoff inicial entre reintentos. El backoff real es
+	// BaseBackoff * 2^sync_retries: el primer fallo espera BaseBackoff, el
+	// segundo 2*BaseBackoff, etc. Evita que el worker martille a JIRA si
+	// está caído.
+	BaseBackoff time.Duration
 }
 
 type NewsConfig struct {
 	FeedURL  string
 	Limit    int
 	CacheTTL time.Duration
+}
+
+// RetentionConfig controla la purga periódica de metadata (PII) de los
+// incidentes. Si IncidentMetadataMaxAge <= 0 el worker no se inicia.
+type RetentionConfig struct {
+	IncidentMetadataMaxAge time.Duration
+	Interval               time.Duration
 }
 
 func Load() (Config, error) {
@@ -69,7 +98,10 @@ func Load() (Config, error) {
 			IdleTimeout:       getDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 			ShutdownTimeout:   getDuration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 			MaxBodyBytes:      int64(getInt("HTTP_MAX_BODY_BYTES", 1<<20)),
-			AllowedOrigins:    parseCSV(getenv("ALLOWED_ORIGINS", "http://localhost:5173")),
+			AllowedOrigins:    parseAllowedOrigins(),
+
+			IncidentRateLimit:  getInt("INCIDENT_RATE_LIMIT", 10),
+			IncidentRateWindow: getDuration("INCIDENT_RATE_WINDOW", time.Minute),
 		},
 		DB: DBConfig{
 			DSN:               dsn,
@@ -78,6 +110,8 @@ func Load() (Config, error) {
 			MaxConnLifetime:   getDuration("DB_MAX_CONN_LIFETIME", time.Hour),
 			MaxConnIdleTime:   getDuration("DB_MAX_CONN_IDLE", 30*time.Minute),
 			HealthCheckPeriod: getDuration("DB_HEALTHCHECK_PERIOD", time.Minute),
+			OpTimeout:         getDuration("DB_OP_TIMEOUT", 5*time.Second),
+			MigrateOnStart:    getBool("MIGRATE_ON_START", true),
 		},
 		Jira: JiraConfig{
 			Enabled:       getBool("JIRA_ENABLED", false),
@@ -89,11 +123,16 @@ func Load() (Config, error) {
 			HTTPTimeout:   getDuration("JIRA_HTTP_TIMEOUT", 10*time.Second),
 			RetryInterval: getDuration("JIRA_RETRY_INTERVAL", 5*time.Minute),
 			MaxRetries:    getInt("JIRA_MAX_RETRIES", 10),
+			BaseBackoff:   getDuration("JIRA_RETRY_BASE_BACKOFF", 30*time.Second),
 		},
 		News: NewsConfig{
 			FeedURL:  getenv("NEWS_FEED_URL", "https://feeds.feedburner.com/TheHackersNews"),
 			Limit:    getInt("NEWS_LIMIT", 5),
 			CacheTTL: getDuration("NEWS_CACHE_TTL", 15*time.Minute),
+		},
+		Retention: RetentionConfig{
+			IncidentMetadataMaxAge: getDuration("INCIDENT_METADATA_MAX_AGE", 90*24*time.Hour),
+			Interval:               getDuration("RETENTION_INTERVAL", 24*time.Hour),
 		},
 	}
 
@@ -161,6 +200,22 @@ func getBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// parseAllowedOrigins distingue tres casos para ALLOWED_ORIGINS:
+//   - unset:        devuelve el default de dev (http://localhost:5173).
+//   - seteado y no vacío: parsea la CSV.
+//   - seteado y vacío:    devuelve []string{} (CORS deshabilitado en runtime).
+//
+// Esto es deliberado: en prod el front y el back viven detrás del mismo
+// reverse proxy, así que CORS no aplica. Setear ALLOWED_ORIGINS="" desactiva
+// el middleware en lugar de quedar con un default permisivo.
+func parseAllowedOrigins() []string {
+	v, ok := os.LookupEnv("ALLOWED_ORIGINS")
+	if !ok {
+		return []string{"http://localhost:5173"}
+	}
+	return parseCSV(v)
 }
 
 // parseCSV separa una cadena por comas y descarta entradas vacías.

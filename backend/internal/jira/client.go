@@ -134,9 +134,12 @@ func (c *httpClient) CreateIssue(ctx context.Context, incident *models.Incident)
 	}, nil
 }
 
+// truncate corta un string a n runes (no bytes). Importante para UTF-8:
+// cortar por bytes puede partir un code-point a la mitad y romper el JSON.
 func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n])
 	}
 	return s
 }

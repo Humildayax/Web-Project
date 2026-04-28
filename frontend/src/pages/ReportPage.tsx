@@ -73,7 +73,9 @@ export default function ReportPage() {
             maxLength={255}
             placeholder="Ej: Phishing reportado al correo corporativo"
           />
-          <div className="field-hint">3 a 255 caracteres.</div>
+          <div className="field-hint">
+            3 a 255 caracteres. <span className="char-count">{form.title.length}/255</span>
+          </div>
         </div>
 
         <div className="field">
@@ -90,7 +92,9 @@ export default function ReportPage() {
             maxLength={10000}
             placeholder="Detalle del incidente, fechas, indicadores observables…"
           />
-          <div className="field-hint">Mínimo 5 caracteres.</div>
+          <div className="field-hint">
+            Mínimo 5 caracteres. <span className="char-count">{form.description.length}/10000</span>
+          </div>
         </div>
 
         <div className="field">
@@ -106,6 +110,9 @@ export default function ReportPage() {
             maxLength={100}
             placeholder="Tu nombre o usuario corporativo"
           />
+          <div className="field-hint">
+            <span className="char-count">{form.author.length}/100</span>
+          </div>
         </div>
 
         <button type="submit" className="button" disabled={submitting}>

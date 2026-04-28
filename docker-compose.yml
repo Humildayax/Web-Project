@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:15-alpine
+    # Pin por digest para builds/deploys reproducibles. Si actualizás el tag,
+    # pedí los nuevos SHAs y reemplazá acá y en los Dockerfiles.
+    image: postgres:15-alpine@sha256:09e4f20b14ddb3dfe3a0c825b206032aaf8f28300ba2070c0b60fc1c10c6abc7
     container_name: security-db
     restart: unless-stopped
     environment:
@@ -13,7 +15,9 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # El schema lo aplica el backend con golang-migrate al arrancar
+      # (las migraciones viven en backend/migrations, embebidas en el binario).
+      # Por eso este servicio ya no monta init.sql en docker-entrypoint-initdb.d.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -36,7 +40,10 @@ services:
       DB_NAME: ${DB_NAME}
       DB_HOST: db
       DB_PORT: 5432
-      DB_SSLMODE: disable
+      # Por default `disable` porque el back y la DB viven en la misma red
+      # interna de compose. Si en algún entorno la DB queda fuera (RDS, otro
+      # host), seteá DB_SSLMODE=require (o verify-full) en el .env.
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
 
       # HTTP / CORS: en prod el front es mismo origen, CORS no aplica
       # para mismo origen. Igual lo dejamos configurable.

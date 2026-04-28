@@ -7,9 +7,65 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
 )
+
+const claimPendingSync = `-- name: ClaimPendingSync :many
+WITH claimed AS (
+    SELECT id FROM incidents
+    WHERE jira_sync = FALSE
+      AND sync_retries < $1
+      AND (last_sync_attempt IS NULL
+           OR last_sync_attempt < NOW() - make_interval(secs => $2) * POWER(2::numeric, sync_retries))
+    ORDER BY created_at ASC
+    LIMIT $3
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE incidents
+SET last_sync_attempt = NOW()
+FROM claimed
+WHERE incidents.id = claimed.id
+RETURNING incidents.id, incidents.title, incidents.description, incidents.author,
+          incidents.created_at, incidents.jira_sync, incidents.jira_issue_key,
+          incidents.sync_retries, incidents.last_sync_attempt, incidents.metadata
+`
+
+type ClaimPendingSyncParams struct {
+	SyncRetries     int32
+	BaseBackoffSecs int32
+	Limit           int32
+}
+
+func (q *Queries) ClaimPendingSync(ctx context.Context, arg ClaimPendingSyncParams) ([]Incident, error) {
+	rows, err := q.db.Query(ctx, claimPendingSync, arg.SyncRetries, arg.BaseBackoffSecs, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Incident{}
+	for rows.Next() {
+		var i Incident
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Description,
+			&i.Author,
+			&i.CreatedAt,
+			&i.JiraSync,
+			&i.JiraIssueKey,
+			&i.SyncRetries,
+			&i.LastSyncAttempt,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const createIncident = `-- name: CreateIncident :one
 INSERT INTO incidents (title, description, author, jira_sync, metadata)
@@ -47,49 +103,19 @@ func (q *Queries) CreateIncident(ctx context.Context, arg CreateIncidentParams) 
 	return i, err
 }
 
-const listPendingSync = `-- name: ListPendingSync :many
-SELECT id, title, description, author, created_at, jira_sync, jira_issue_key, sync_retries, last_sync_attempt, metadata
-FROM incidents
-WHERE jira_sync = FALSE
-  AND sync_retries < $1
-ORDER BY created_at ASC
-LIMIT $2
+const purgeOldMetadata = `-- name: PurgeOldMetadata :execrows
+UPDATE incidents
+SET metadata = NULL
+WHERE metadata IS NOT NULL
+  AND created_at < $1
 `
 
-type ListPendingSyncParams struct {
-	SyncRetries int32
-	Limit       int32
-}
-
-func (q *Queries) ListPendingSync(ctx context.Context, arg ListPendingSyncParams) ([]Incident, error) {
-	rows, err := q.db.Query(ctx, listPendingSync, arg.SyncRetries, arg.Limit)
+func (q *Queries) PurgeOldMetadata(ctx context.Context, createdAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeOldMetadata, createdAt)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	defer rows.Close()
-	items := []Incident{}
-	for rows.Next() {
-		var i Incident
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Description,
-			&i.Author,
-			&i.CreatedAt,
-			&i.JiraSync,
-			&i.JiraIssueKey,
-			&i.SyncRetries,
-			&i.LastSyncAttempt,
-			&i.Metadata,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+	return result.RowsAffected(), nil
 }
 
 const markIncidentSyncFailed = `-- name: MarkIncidentSyncFailed :exec
@@ -114,7 +140,7 @@ WHERE id = $1
 
 type MarkIncidentSyncedParams struct {
 	ID           string
-	JiraIssueKey pgtype.Text
+	JiraIssueKey *string
 }
 
 func (q *Queries) MarkIncidentSynced(ctx context.Context, arg MarkIncidentSyncedParams) error {

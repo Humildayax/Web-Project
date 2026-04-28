@@ -21,9 +21,3 @@ CREATE TABLE IF NOT EXISTS incidents (
 CREATE INDEX IF NOT EXISTS idx_incidents_pending_sync
     ON incidents (created_at)
     WHERE jira_sync = FALSE;
-
--- Si tu volumen de Postgres ya existía antes de estos cambios:
--- ALTER TABLE incidents ALTER COLUMN created_at SET NOT NULL;
--- ALTER TABLE incidents ADD COLUMN IF NOT EXISTS jira_issue_key TEXT;
--- ALTER TABLE incidents ADD COLUMN IF NOT EXISTS sync_retries INTEGER NOT NULL DEFAULT 0;
--- ALTER TABLE incidents ADD COLUMN IF NOT EXISTS last_sync_attempt TIMESTAMP WITH TIME ZONE;

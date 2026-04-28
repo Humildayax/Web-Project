@@ -10,12 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// toDomain convierte el modelo de persistencia (db.Incident, generado por sqlc
-// con id como string y tipos pgtype.*) al modelo de dominio (models.Incident).
+// toDomain convierte el modelo de persistencia (db.Incident, generado por sqlc)
+// al modelo de dominio (models.Incident).
 //
 // Esta función es la frontera entre la capa de repositorio y el resto del
-// sistema: cualquier divergencia entre los modelos (campos solo-DB,
-// versiones, soft-delete, etc.) se absorbe acá sin tocar services.
+// sistema: cualquier divergencia entre los modelos (campos solo-DB, versiones,
+// soft-delete, etc.) se absorbe acá sin tocar services.
 func toDomain(row db.Incident) (models.Incident, error) {
 	id, err := uuid.Parse(row.ID)
 	if err != nil {
@@ -27,11 +27,12 @@ func toDomain(row db.Incident) (models.Incident, error) {
 		Title:       row.Title,
 		Description: row.Description,
 		Author:      row.Author,
-		CreatedAt:   row.CreatedAt.Time, // pgtype.Timestamptz -> time.Time (NOT NULL en schema)
+		CreatedAt:   row.CreatedAt,
 		JiraSync:    row.JiraSync,
+		SyncRetries: row.SyncRetries,
 	}
-	if row.JiraIssueKey.Valid {
-		inc.JiraIssueKey = row.JiraIssueKey.String
+	if row.JiraIssueKey != nil {
+		inc.JiraIssueKey = *row.JiraIssueKey
 	}
 	if len(row.Metadata) > 0 {
 		var m models.IncidentMetadata

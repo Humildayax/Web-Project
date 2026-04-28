@@ -6,13 +6,15 @@ package db
 
 import (
 	"context"
+	"time"
 )
 
 type Querier interface {
+	ClaimPendingSync(ctx context.Context, arg ClaimPendingSyncParams) ([]Incident, error)
 	CreateIncident(ctx context.Context, arg CreateIncidentParams) (Incident, error)
-	ListPendingSync(ctx context.Context, arg ListPendingSyncParams) ([]Incident, error)
 	MarkIncidentSyncFailed(ctx context.Context, id string) error
 	MarkIncidentSynced(ctx context.Context, arg MarkIncidentSyncedParams) error
+	PurgeOldMetadata(ctx context.Context, createdAt time.Time) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -53,7 +53,6 @@ func (p *rssProvider) FetchNews(ctx context.Context) ([]models.NewsItem, error) 
 
 		out = append(out, models.NewsItem{
 			Title:       item.Title,
-			Description: item.Description,
 			Link:        item.Link,
 			PublishedAt: published,
 			Source:      feed.Title,

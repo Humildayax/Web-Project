@@ -2,7 +2,11 @@ version: "2"
 sql:
   - engine: "postgresql"
     queries: "db/queries"
-    schema: "scripts/init.sql"
+    # sqlc lee solo los archivos .up.sql para inferir el schema, ignorando
+    # los .down.sql (que tienen DROPs y confundirían el parser). Cuando se
+    # agregue una migración, sumá su .up.sql a esta lista.
+    schema:
+      - "migrations/00001_init.up.sql"
     gen:
       go:
         package: "db"
@@ -13,7 +17,11 @@ sql:
         emit_interface: true
         emit_exact_table_names: false
         emit_empty_slices: true
-        emit_pointers_for_null_types: false
+        # true: columnas nullable se generan como *T en lugar de pgtype.X.
+        # Más idiomático en Go puro y evita el chequeo manual de .Valid en
+        # los mappers (mappers.go usa `if row.X != nil` en vez de
+        # `if row.X.Valid`).
+        emit_pointers_for_null_types: true
         overrides:
           # Trabajamos con UUID como string en el código de aplicación.
           - column: "incidents.id"

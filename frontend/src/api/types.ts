@@ -34,7 +34,6 @@ export interface IncidentResponse {
 // Espejo de models.NewsItem
 export interface NewsItem {
   title: string
-  description: string
   link: string
   published_at: string
   source: string

@@ -231,6 +231,13 @@ code {
   margin-top: 0.3rem;
 }
 
+/* Contador discreto al final del field-hint, monoespaciado para que el
+   ancho no salte cuando cambia el número. */
+.char-count {
+  float: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .button {
   background: var(--accent);
   color: white;

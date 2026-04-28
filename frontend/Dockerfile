@@ -1,7 +1,9 @@
 # =============================================================
 # Stage 1: build del bundle estático
 # =============================================================
-FROM node:22-alpine AS builder
+# Pin por digest para builds reproducibles. Refrescar manualmente cuando
+# se actualice el tag node:22-alpine.
+FROM node:22-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f AS builder
 
 WORKDIR /src
 
@@ -17,7 +19,7 @@ RUN npm run build
 # =============================================================
 # Stage 2: nginx sirve el bundle + proxy /api -> backend
 # =============================================================
-FROM nginx:1.27-alpine
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
 
 # Reemplazamos la config por defecto.
 COPY nginx.conf /etc/nginx/conf.d/default.conf

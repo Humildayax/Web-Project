@@ -5,7 +5,7 @@
 package db
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
 )
 
 type Incident struct {
@@ -13,10 +13,10 @@ type Incident struct {
 	Title           string
 	Description     string
 	Author          string
-	CreatedAt       pgtype.Timestamptz
+	CreatedAt       time.Time
 	JiraSync        bool
-	JiraIssueKey    pgtype.Text
+	JiraIssueKey    *string
 	SyncRetries     int32
-	LastSyncAttempt pgtype.Timestamptz
+	LastSyncAttempt *time.Time
 	Metadata        []byte
 }

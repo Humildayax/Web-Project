@@ -49,7 +49,7 @@ func (h *IncidentHandler) CreateIncident(w http.ResponseWriter, r *http.Request)
 	incident := req.ToModel()
 	// Sin auth aún: registramos el contexto operativo del reporte.
 	incident.Metadata = &models.IncidentMetadata{
-		SourceIP:   clientIP(r),
+		SourceIP:   ClientIP(r),
 		UserAgent:  r.UserAgent(),
 		ReceivedAt: time.Now().UTC(),
 	}
@@ -63,15 +63,25 @@ func (h *IncidentHandler) CreateIncident(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, dto.IncidentResponseFromModel(incident))
 }
 
-func clientIP(r *http.Request) string {
+// ClientIP devuelve el IP del cliente para audit logging y rate-limiting.
+//
+// Confía en este orden:
+//  1. X-Real-IP: nuestro nginx lo setea con $remote_addr (sobreescribe lo
+//     que mande el cliente), por eso es la fuente más confiable.
+//  2. Último valor de X-Forwarded-For: nginx hace `proxy_add_x_forwarded_for`
+//     que APPENDEA al header existente; el último elemento es el agregado
+//     por el proxy más cercano y no es falsificable. El primero, en cambio,
+//     es lo que mandó el cliente y se puede inventar.
+//  3. RemoteAddr como último recurso (acceso directo al backend, sin proxy).
+func ClientIP(r *http.Request) string {
+	if rip := strings.TrimSpace(r.Header.Get("X-Real-IP")); rip != "" {
+		return rip
+	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.Index(xff, ","); i > 0 {
-			return strings.TrimSpace(xff[:i])
+		if i := strings.LastIndex(xff, ","); i >= 0 {
+			return strings.TrimSpace(xff[i+1:])
 		}
 		return strings.TrimSpace(xff)
-	}
-	if rip := r.Header.Get("X-Real-IP"); rip != "" {
-		return rip
 	}
 	return r.RemoteAddr
 }
