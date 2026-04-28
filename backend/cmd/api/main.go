@@ -17,6 +17,7 @@ import (
 	"security-portal/internal/services"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -38,7 +39,11 @@ func setupLogger() {
 }
 
 func run() error {
+	// Buscamos .env en CWD primero, después en el directorio padre.
+	// Esto cubre: `go run ./cmd/api` desde backend/ (CWD=backend, .env vive en ../)
+	// y también el caso de tener un .env local en backend/ si alguien lo prefiere.
 	_ = godotenv.Load()
+	_ = godotenv.Load("../.env")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -59,7 +64,7 @@ func run() error {
 	deps := wireDependencies(cfg, pool, jiraClient)
 	go deps.worker.Run(ctx)
 
-	router := buildRouter(deps)
+	router := buildRouter(deps, cfg.HTTP.AllowedOrigins)
 	return runServer(ctx, cfg, router)
 }
 
@@ -102,10 +107,23 @@ func wireDependencies(cfg config.Config, pool *pgxpool.Pool, jiraClient jira.Cli
 	}
 }
 
-func buildRouter(d dependencies) http.Handler {
+func buildRouter(d dependencies, allowedOrigins []string) http.Handler {
 	r := chi.NewRouter()
-	r.Use(handlers.Recover)
+
+	// Orden de middlewares (outer -> inner):
+	//   CORS    : atiende preflight OPTIONS y agrega headers a toda respuesta.
+	//   Logging : registra todas las requests (incluido OPTIONS).
+	//   Recover : captura panics del handler para que Logging logre loggear.
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   allowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Content-Type"},
+		ExposedHeaders:   []string{},
+		AllowCredentials: false,
+		MaxAge:           300, // segundos que el browser cachea el preflight
+	}))
 	r.Use(handlers.Logging)
+	r.Use(handlers.Recover)
 
 	r.Route("/api", func(api chi.Router) {
 		api.Post("/incidents", d.incidentH.CreateIncident)

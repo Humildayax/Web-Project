@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type HTTPConfig struct {
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
 	MaxBodyBytes      int64
+	AllowedOrigins    []string
 }
 
 type DBConfig struct {
@@ -67,6 +69,7 @@ func Load() (Config, error) {
 			IdleTimeout:       getDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 			ShutdownTimeout:   getDuration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 			MaxBodyBytes:      int64(getInt("HTTP_MAX_BODY_BYTES", 1<<20)),
+			AllowedOrigins:    parseCSV(getenv("ALLOWED_ORIGINS", "http://localhost:5173")),
 		},
 		DB: DBConfig{
 			DSN:               dsn,
@@ -158,4 +161,17 @@ func getBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// parseCSV separa una cadena por comas y descarta entradas vacías.
+// Útil para variables de entorno con varios valores (ej: ALLOWED_ORIGINS).
+func parseCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

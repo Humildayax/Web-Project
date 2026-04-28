@@ -4,8 +4,8 @@
 *.local.env
 
 # Binarios Go
-/bin/
-/tmp/
+/backend/bin/
+/backend/tmp/
 security-portal
 
 # IDE
