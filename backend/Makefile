@@ -1,13 +1,13 @@
-.PHONY: help sqlc tidy build run db-up db-down
+.PHONY: help sqlc tidy build run
 
 help:
-	@echo "Targets:"
-	@echo "  sqlc     - Regenera el código de internal/db a partir de db/queries y scripts/init.sql"
-	@echo "  tidy     - go mod tidy"
-	@echo "  build    - Compila el binario en ./bin/api"
-	@echo "  run      - Ejecuta el servidor (necesita .env configurado y db levantada)"
-	@echo "  db-up    - Levanta Postgres con docker compose"
-	@echo "  db-down  - Apaga Postgres"
+	@echo "Targets del backend:"
+	@echo "  make sqlc    Regenera internal/db a partir de db/queries y scripts/init.sql"
+	@echo "  make tidy    go mod tidy"
+	@echo "  make build   Compila el binario en bin/api"
+	@echo "  make run     Ejecuta el servidor (necesita DB levantada: make -C .. dev-db)"
+	@echo ""
+	@echo "Para levantar/apagar la DB y el stack completo, ver Makefile de la raíz."
 
 # Requiere sqlc instalado:
 #   go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
@@ -23,9 +23,3 @@ build:
 
 run:
 	go run ./cmd/api
-
-db-up:
-	docker compose up -d db
-
-db-down:
-	docker compose down

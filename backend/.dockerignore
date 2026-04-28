@@ -1,0 +1,23 @@
+# Build artifacts
+bin/
+tmp/
+
+# Local env / secrets
+.env
+.env.local
+*.local.env
+
+# VCS / IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docs y otros que no necesita el build
+README.md
+*.md
+
+# Logs
+*.log

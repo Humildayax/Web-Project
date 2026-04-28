@@ -2,22 +2,72 @@ services:
   db:
     image: postgres:15-alpine
     container_name: security-db
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
+      # Expuesto al host para inspección con psql/DBeaver.
+      # En prod real este puerto se elimina.
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - security-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: security-backend
+    restart: unless-stopped
+    environment:
+      # DB: dentro de la red de compose, el host es el nombre del servicio.
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_SSLMODE: disable
+
+      # HTTP / CORS: en prod el front es mismo origen, CORS no aplica
+      # para mismo origen. Igual lo dejamos configurable.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
+
+      # JIRA (opcional). Si JIRA_ENABLED=false el back usa el cliente noop.
+      JIRA_ENABLED: ${JIRA_ENABLED:-false}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-}
+      JIRA_ISSUE_TYPE: ${JIRA_ISSUE_TYPE:-Task}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - security-network
+    # Sin `ports:` -> backend NO se expone al host. Se accede solo
+    # desde el contenedor del frontend (vía nginx proxy).
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: security-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - security-network
 

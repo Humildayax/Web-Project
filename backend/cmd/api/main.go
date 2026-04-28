@@ -126,6 +126,12 @@ func buildRouter(d dependencies, allowedOrigins []string) http.Handler {
 	r.Use(handlers.Recover)
 
 	r.Route("/api", func(api chi.Router) {
+		// Healthcheck liviano: lo usan Docker, k8s probes y monitoreo externo.
+		// No depende de DB/JIRA a propósito (eso sería un readiness check distinto).
+		api.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		})
 		api.Post("/incidents", d.incidentH.CreateIncident)
 		api.Get("/news", d.newsH.GetNews)
 	})
