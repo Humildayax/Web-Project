@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { ApiError } from '../api/client'
 import { createIncident } from '../api/incidents'
 import type { IncidentResponse } from '../api/types'
@@ -39,13 +39,19 @@ export default function ReportPage() {
   const [error, setError] = useState<string | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
 
-  // Cleanup de object URLs al desmontar o reemplazar archivos. Sin esto
-  // el browser acumula memoria por cada preview generada.
+  // Cleanup de object URLs al desmontar. Las revocaciones individuales (por
+  // archivo quitado o tras submit exitoso) viven en removeFile/onSubmit.
+  //
+  // Usamos un ref para no depender de `files` en el array de deps: si lo
+  // pusiéramos, el cleanup correría en cada cambio y revocaría URLs que aún
+  // están en pantalla (rompe los thumbnails al agregar un archivo nuevo).
+  const filesRef = useRef(files)
+  filesRef.current = files
   useEffect(() => {
     return () => {
-      for (const f of files) URL.revokeObjectURL(f.previewUrl)
+      for (const f of filesRef.current) URL.revokeObjectURL(f.previewUrl)
     }
-  }, [files])
+  }, [])
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((s) => ({ ...s, [key]: value }))

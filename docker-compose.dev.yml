@@ -1,0 +1,11 @@
+# Override para desarrollo. Se aplica con:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+# (eso es exactamente lo que hace `make dev-db`).
+#
+# La diferencia única vs el stack prod-like es exponer Postgres al host para
+# inspección con psql/DBeaver. Bindeamos a 127.0.0.1 para que el puerto NO
+# sea alcanzable desde la red local; solo desde el propio host.
+services:
+  db:
+    ports:
+      - "127.0.0.1:5433:5432"

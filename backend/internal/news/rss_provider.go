@@ -91,10 +91,20 @@ func (p *rssProvider) FetchNews(ctx context.Context) ([]models.NewsItem, error) 
 	return out, nil
 }
 
+// feedFetchTimeout acota lo que esperamos por un feed individual. Sin esto,
+// un feed que cuelga arrastra la primera request del usuario hasta el
+// HTTP_WRITE_TIMEOUT del servidor (15s default). 5s es más que suficiente
+// para un fetch sano y corta a tiempo cuando un feed responde lento.
+const feedFetchTimeout = 5 * time.Second
+
 // fetchOne parsea un feed, ordena por fecha desc y devuelve los top `limit`.
 func fetchOne(ctx context.Context, url string, limit int) ([]models.NewsItem, error) {
 	fp := gofeed.NewParser()
-	feed, err := fp.ParseURLWithContext(url, ctx)
+
+	feedCtx, cancel := context.WithTimeout(ctx, feedFetchTimeout)
+	defer cancel()
+
+	feed, err := fp.ParseURLWithContext(url, feedCtx)
 	if err != nil {
 		return nil, err
 	}

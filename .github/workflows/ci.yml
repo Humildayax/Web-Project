@@ -45,7 +45,12 @@ jobs:
         run: go test -race ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # v7+ es la línea que entiende la config v2 (`.golangci.yml` con
+        # `version: "2"`, `linters.default`, bloque `formatters`). v6
+        # resuelve `version: latest` a la serie v1 y falla en
+        # `golangci-lint config verify` con "additional properties
+        # 'default'/'formatters'/'version' not allowed".
+        uses: golangci/golangci-lint-action@v7
         with:
           version: latest
           working-directory: backend

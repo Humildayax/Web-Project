@@ -9,10 +9,9 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-    ports:
-      # Expuesto al host para inspección con psql/DBeaver.
-      # En prod real este puerto se elimina.
-      - "5433:5432"
+    # Sin `ports:` aquí: en stack prod-like la DB no se expone al host. Para
+    # inspección desde el host (psql/DBeaver) usar `make dev-db`, que aplica
+    # docker-compose.dev.yml y bindea 127.0.0.1:5433.
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # El schema lo aplica el backend con golang-migrate al arrancar
