@@ -22,6 +22,38 @@ linters:
     - gocritic      # checks de estilo y posibles bugs
     - revive        # reemplazo moderno de golint
 
+  settings:
+    errcheck:
+      # Errores en `defer x.Close()` los aceptamos: si Close falla nunca hay
+      # acción razonable que tomar (el recurso queda como esté). Listamos los
+      # Close concretos que aparecen en el código y la interfaz genérica.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*database/sql.DB).Close
+        - (*net/http.Response.Body).Close
+        - (mime/multipart.File).Close
+        # iofs.PartialDriver implementa source.Driver (no io.Closer canonical).
+        - (github.com/golang-migrate/migrate/v4/source.Driver).Close
+
+    revive:
+      rules:
+        # Reglas que no aplican a este codebase: el equipo prefiere
+        # comentarios contextuales (qué decisión, por qué) sobre comentarios
+        # formales por cada export tipo godoc.
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: blank-imports
+          disabled: true
+        # `max` como nombre de parámetro shadowea el built-in pero no se usa
+        # como built-in en el cuerpo. Mantenemos la regla habilitada por si
+        # algún día se filtra un caso real, pero en parámetros de límite es
+        # un nombre razonable.
+        - name: redefines-builtin-id
+          disabled: true
+
   exclusions:
     rules:
       # Permitimos errores no chequeados al escribir respuestas HTTP — el

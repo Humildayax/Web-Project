@@ -26,10 +26,10 @@ type ProcessedAttachment struct {
 }
 
 type IncidentService struct {
-	repo            repository.IncidentRepository
-	attachments     repository.AttachmentRepository
-	storage         storage.Storage
-	jira            jira.Client
+	repo        repository.IncidentRepository
+	attachments repository.AttachmentRepository
+	storage     storage.Storage
+	jira        jira.Client
 }
 
 func NewIncidentService(

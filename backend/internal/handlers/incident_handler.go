@@ -19,10 +19,10 @@ import (
 // AttachmentLimits define las cotas que aplica el handler antes de procesar.
 // Vienen de config y se inyectan al construirlo.
 type AttachmentLimits struct {
-	MaxFiles        int   // máximo de archivos por request
-	MaxFileBytes    int64 // máximo por archivo (post-magic-byte check)
-	MaxImageDim     int   // ancho/alto máximo en pixels (compression bombs)
-	MaxMemoryParse  int64 // RAM antes de spillar a temp files (multipart)
+	MaxFiles       int   // máximo de archivos por request
+	MaxFileBytes   int64 // máximo por archivo (post-magic-byte check)
+	MaxImageDim    int   // ancho/alto máximo en pixels (compression bombs)
+	MaxMemoryParse int64 // RAM antes de spillar a temp files (multipart)
 }
 
 type IncidentHandler struct {

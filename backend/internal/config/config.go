@@ -124,9 +124,9 @@ type StorageConfig struct {
 
 // AttachmentConfig define las cotas que el handler aplica antes de
 // procesar un upload. Triple defensa contra abuso:
-//  - MaxFiles: cuántos archivos por reporte.
-//  - MaxFileBytes: tamaño máximo por archivo (post lectura).
-//  - MaxImageDim: ancho/alto máximo en pixels (anti compression bomb).
+//   - MaxFiles: cuántos archivos por reporte.
+//   - MaxFileBytes: tamaño máximo por archivo (post lectura).
+//   - MaxImageDim: ancho/alto máximo en pixels (anti compression bomb).
 type AttachmentConfig struct {
 	MaxFiles       int
 	MaxFileBytes   int64
@@ -150,8 +150,8 @@ func Load() (Config, error) {
 			ShutdownTimeout:   getDuration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 			// Default subido a 30 MiB para soportar reportes con hasta 5
 			// imágenes de 5 MB. nginx hace el primer corte (client_max_body_size).
-			MaxBodyBytes:      int64(getInt("HTTP_MAX_BODY_BYTES", 30<<20)),
-			AllowedOrigins:    parseAllowedOrigins(),
+			MaxBodyBytes:   int64(getInt("HTTP_MAX_BODY_BYTES", 30<<20)),
+			AllowedOrigins: parseAllowedOrigins(),
 
 			IncidentRateLimit:  getInt("INCIDENT_RATE_LIMIT", 10),
 			IncidentRateWindow: getDuration("INCIDENT_RATE_WINDOW", time.Minute),
@@ -201,9 +201,9 @@ func Load() (Config, error) {
 		},
 		Attachment: AttachmentConfig{
 			MaxFiles:       getInt("ATTACHMENT_MAX_FILES", 5),
-			MaxFileBytes:   int64(getInt("ATTACHMENT_MAX_FILE_BYTES", 5<<20)),  // 5 MB
+			MaxFileBytes:   int64(getInt("ATTACHMENT_MAX_FILE_BYTES", 5<<20)), // 5 MB
 			MaxImageDim:    getInt("ATTACHMENT_MAX_IMAGE_DIM", 4096),
-			MaxMemoryParse: int64(getInt("ATTACHMENT_PARSE_MEMORY", 10<<20)),   // 10 MB
+			MaxMemoryParse: int64(getInt("ATTACHMENT_PARSE_MEMORY", 10<<20)), // 10 MB
 		},
 	}
 
