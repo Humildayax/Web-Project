@@ -30,8 +30,8 @@ export default function HomePage() {
             <div className="col-md-8">
               <h1 className="display-5 fw-bold mb-3">Security Portal</h1>
               <p className="lead text-white-50 mb-4">
-                Centro de ciberseguridad de Bodytech. Reportá incidentes, consultá las
-                últimas amenazas y revisá las políticas corporativas en un solo lugar.
+                Centro de ciberseguridad: reportá incidentes, consultá las
+                últimas amenazas y revisá las políticas vigentes en un solo lugar.
               </p>
               <div className="d-flex gap-2 flex-wrap justify-content-center justify-content-md-start">
                 <Link to="/report" className="btn btn-primary btn-lg">
@@ -45,7 +45,8 @@ export default function HomePage() {
             <div className="col-md-4 text-center">
               <img
                 src="/logo.svg"
-                alt="Bodytech"
+                alt=""
+                aria-hidden="true"
                 className="img-fluid"
                 style={{ maxHeight: '120px', filter: 'brightness(0) invert(1)' }}
               />

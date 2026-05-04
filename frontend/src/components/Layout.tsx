@@ -9,7 +9,7 @@ export default function Layout() {
       <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm sticky-top">
         <div className="container">
           <Link to="/" className="navbar-brand d-flex align-items-center gap-2">
-            <img src="/logo.svg" alt="Bodytech" className="brand-logo" />
+            <img src="/logo.svg" alt="" aria-hidden="true" className="brand-logo" />
             <span className="fw-semibold text-dark">Security Portal</span>
           </Link>
 
@@ -50,7 +50,7 @@ export default function Layout() {
 
       <footer className="bg-dark text-white-50 py-3 mt-auto">
         <div className="container d-flex flex-column flex-md-row justify-content-between gap-2">
-          <span>© {new Date().getFullYear()} Bodytech · Security Portal</span>
+          <span>© {new Date().getFullYear()} Security Portal</span>
           <span>
             ¿Sospechas un incidente?{' '}
             <Link to="/report" className="link-light text-decoration-underline">
