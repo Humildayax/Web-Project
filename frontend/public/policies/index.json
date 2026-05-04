@@ -1,9 +1,9 @@
 [
   {
-    "id": "general",
-    "title": "Políticas generales de seguridad",
-    "description": "Lineamientos corporativos vigentes para la operación segura del entorno digital.",
+    "id": "IA",
+    "title": "Políticas uso de IA",
+    "description": "Lineamientos corporativos vigentes para el uso seguro de IA.",
     "filename": "policies.pdf",
-    "updated_at": "2026-04-28"
+    "updated_at": "2026-04-16"
   }
 ]
