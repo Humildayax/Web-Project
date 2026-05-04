@@ -1,8 +1,8 @@
 export default function PoliciesPage() {
   return (
-    <section>
-      <h1>Políticas de seguridad</h1>
-      <p className="card-meta" style={{ marginBottom: '1rem' }}>
+    <div className="container py-4 py-md-5">
+      <h1 className="fw-bold mb-3">Políticas de seguridad</h1>
+      <p className="text-muted mb-4">
         Si el visor no carga el documento, podés{' '}
         <a href="/policies.pdf" target="_blank" rel="noreferrer">
           descargarlo aquí
@@ -14,6 +14,6 @@ export default function PoliciesPage() {
         title="Políticas de seguridad"
         className="pdf-frame"
       />
-    </section>
+    </div>
   )
 }

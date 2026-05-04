@@ -37,17 +37,18 @@ func (r CreateIncidentRequest) ToModel() *models.Incident {
 // IncidentResponse es la representación pública del incidente.
 // No expone metadata interna (IP, user-agent), retries ni last_sync_attempt.
 type IncidentResponse struct {
-	ID           uuid.UUID `json:"id"`
-	Title        string    `json:"title"`
-	Description  string    `json:"description"`
-	Author       string    `json:"author"`
-	CreatedAt    time.Time `json:"created_at"`
-	JiraSync     bool      `json:"jira_sync"`
-	JiraIssueKey string    `json:"jira_issue_key,omitempty"`
+	ID           uuid.UUID            `json:"id"`
+	Title        string               `json:"title"`
+	Description  string               `json:"description"`
+	Author       string               `json:"author"`
+	CreatedAt    time.Time            `json:"created_at"`
+	JiraSync     bool                 `json:"jira_sync"`
+	JiraIssueKey string               `json:"jira_issue_key,omitempty"`
+	Attachments  []AttachmentResponse `json:"attachments,omitempty"`
 }
 
-func IncidentResponseFromModel(m *models.Incident) IncidentResponse {
-	return IncidentResponse{
+func IncidentResponseFromModel(m *models.Incident, attachments []models.Attachment) IncidentResponse {
+	resp := IncidentResponse{
 		ID:           m.ID,
 		Title:        m.Title,
 		Description:  m.Description,
@@ -56,4 +57,11 @@ func IncidentResponseFromModel(m *models.Incident) IncidentResponse {
 		JiraSync:     m.JiraSync,
 		JiraIssueKey: m.JiraIssueKey,
 	}
+	if len(attachments) > 0 {
+		resp.Attachments = make([]AttachmentResponse, len(attachments))
+		for i := range attachments {
+			resp.Attachments[i] = AttachmentResponseFromModel(&attachments[i])
+		}
+	}
+	return resp
 }

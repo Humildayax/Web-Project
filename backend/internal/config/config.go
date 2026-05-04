@@ -10,11 +10,13 @@ import (
 )
 
 type Config struct {
-	HTTP      HTTPConfig
-	DB        DBConfig
-	Jira      JiraConfig
-	News      NewsConfig
-	Retention RetentionConfig
+	HTTP       HTTPConfig
+	DB         DBConfig
+	Jira       JiraConfig
+	News       NewsConfig
+	Retention  RetentionConfig
+	Storage    StorageConfig
+	Attachment AttachmentConfig
 }
 
 type HTTPConfig struct {
@@ -68,12 +70,42 @@ type JiraConfig struct {
 	// segundo 2*BaseBackoff, etc. Evita que el worker martille a JIRA si
 	// está caído.
 	BaseBackoff time.Duration
+
+	// Campos opcionales del ticket. Si una variable está vacía, el campo se
+	// OMITE del payload (no se manda como null) y JIRA aplica su default.
+	// Esto permite ir activando campos uno por uno mientras se ajusta la
+	// instancia destino.
+	AssigneeAccountID string // accountId del usuario; obtenerlo de /rest/api/3/myself
+	ReporterAccountID string // accountId; típicamente el mismo que assignee
+	PriorityName      string // nombre tal como aparece en JIRA: "High", "Medium", etc.
+	ParentID          string // id numérico del issue padre (jerarquía / epic)
+	// StartDateFieldID es el id del custom field "Start date" en TU instancia
+	// (algo tipo "customfield_10015"). Si está seteado, se mapea con la
+	// fecha de creación del incidente (formato YYYY-MM-DD).
+	StartDateFieldID string
+
+	// Epic Link para JIRA Software Classic. En proyectos modernos el padre
+	// se setea con `parent.id` (ParentID arriba); en Classic había que usar
+	// un custom field específico (típicamente customfield_10014) y como
+	// valor la KEY del epic ("CYBER-1"), no el id numérico.
+	//
+	// Si los dos están vacíos, este mapeo se omite. Si parent ya funciona
+	// en tu instancia, no necesitás setear estos.
+	EpicLinkFieldID string
+	EpicLinkValue   string
+
+	// AttachmentBatchSize es cuántos adjuntos sube el worker a JIRA por
+	// tick. Mantiene la latencia del worker acotada cuando hay backlog.
+	AttachmentBatchSize int
 }
 
 type NewsConfig struct {
-	FeedURL  string
-	Limit    int
-	CacheTTL time.Duration
+	FeedURLs []string
+	// LimitPerSource es la cantidad de items que se pide a CADA feed.
+	// Con 4 feeds default y LimitPerSource=3 la página termina con ~12
+	// noticias agrupadas por fuente.
+	LimitPerSource int
+	CacheTTL       time.Duration
 }
 
 // RetentionConfig controla la purga periódica de metadata (PII) de los
@@ -81,6 +113,25 @@ type NewsConfig struct {
 type RetentionConfig struct {
 	IncidentMetadataMaxAge time.Duration
 	Interval               time.Duration
+}
+
+// StorageConfig controla dónde se guardan los binarios de los adjuntos.
+// Por ahora solo tipo "local" (filesystem). Migrable a S3/MinIO sumando
+// otra implementación de storage.Storage sin tocar el resto del código.
+type StorageConfig struct {
+	BasePath string
+}
+
+// AttachmentConfig define las cotas que el handler aplica antes de
+// procesar un upload. Triple defensa contra abuso:
+//  - MaxFiles: cuántos archivos por reporte.
+//  - MaxFileBytes: tamaño máximo por archivo (post lectura).
+//  - MaxImageDim: ancho/alto máximo en pixels (anti compression bomb).
+type AttachmentConfig struct {
+	MaxFiles       int
+	MaxFileBytes   int64
+	MaxImageDim    int
+	MaxMemoryParse int64 // RAM antes de spillar a temp en multipart parse
 }
 
 func Load() (Config, error) {
@@ -97,7 +148,9 @@ func Load() (Config, error) {
 			WriteTimeout:      getDuration("HTTP_WRITE_TIMEOUT", 15*time.Second),
 			IdleTimeout:       getDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 			ShutdownTimeout:   getDuration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
-			MaxBodyBytes:      int64(getInt("HTTP_MAX_BODY_BYTES", 1<<20)),
+			// Default subido a 30 MiB para soportar reportes con hasta 5
+			// imágenes de 5 MB. nginx hace el primer corte (client_max_body_size).
+			MaxBodyBytes:      int64(getInt("HTTP_MAX_BODY_BYTES", 30<<20)),
 			AllowedOrigins:    parseAllowedOrigins(),
 
 			IncidentRateLimit:  getInt("INCIDENT_RATE_LIMIT", 10),
@@ -114,25 +167,43 @@ func Load() (Config, error) {
 			MigrateOnStart:    getBool("MIGRATE_ON_START", true),
 		},
 		Jira: JiraConfig{
-			Enabled:       getBool("JIRA_ENABLED", false),
-			BaseURL:       os.Getenv("JIRA_BASE_URL"),
-			Email:         os.Getenv("JIRA_EMAIL"),
-			APIToken:      os.Getenv("JIRA_API_TOKEN"),
-			ProjectKey:    os.Getenv("JIRA_PROJECT_KEY"),
-			IssueType:     getenv("JIRA_ISSUE_TYPE", "Task"),
-			HTTPTimeout:   getDuration("JIRA_HTTP_TIMEOUT", 10*time.Second),
-			RetryInterval: getDuration("JIRA_RETRY_INTERVAL", 5*time.Minute),
-			MaxRetries:    getInt("JIRA_MAX_RETRIES", 10),
-			BaseBackoff:   getDuration("JIRA_RETRY_BASE_BACKOFF", 30*time.Second),
+			Enabled:           getBool("JIRA_ENABLED", false),
+			BaseURL:           os.Getenv("JIRA_BASE_URL"),
+			Email:             os.Getenv("JIRA_EMAIL"),
+			APIToken:          os.Getenv("JIRA_API_TOKEN"),
+			ProjectKey:        os.Getenv("JIRA_PROJECT_KEY"),
+			IssueType:         getenv("JIRA_ISSUE_TYPE", "Task"),
+			HTTPTimeout:       getDuration("JIRA_HTTP_TIMEOUT", 10*time.Second),
+			RetryInterval:     getDuration("JIRA_RETRY_INTERVAL", 5*time.Minute),
+			MaxRetries:        getInt("JIRA_MAX_RETRIES", 10),
+			BaseBackoff:       getDuration("JIRA_RETRY_BASE_BACKOFF", 30*time.Second),
+			AssigneeAccountID: os.Getenv("JIRA_ASSIGNEE_ACCOUNT_ID"),
+			ReporterAccountID: os.Getenv("JIRA_REPORTER_ACCOUNT_ID"),
+			PriorityName:      os.Getenv("JIRA_PRIORITY_NAME"),
+			ParentID:          os.Getenv("JIRA_PARENT_ID"),
+			StartDateFieldID:  os.Getenv("JIRA_START_DATE_FIELD_ID"),
+			EpicLinkFieldID:   os.Getenv("JIRA_EPIC_LINK_FIELD_ID"),
+			EpicLinkValue:     os.Getenv("JIRA_EPIC_LINK_VALUE"),
+
+			AttachmentBatchSize: getInt("JIRA_ATTACHMENT_BATCH_SIZE", 20),
 		},
 		News: NewsConfig{
-			FeedURL:  getenv("NEWS_FEED_URL", "https://feeds.feedburner.com/TheHackersNews"),
-			Limit:    getInt("NEWS_LIMIT", 5),
-			CacheTTL: getDuration("NEWS_CACHE_TTL", 15*time.Minute),
+			FeedURLs:       parseFeedURLs(),
+			LimitPerSource: getInt("NEWS_LIMIT_PER_SOURCE", 3),
+			CacheTTL:       getDuration("NEWS_CACHE_TTL", 15*time.Minute),
 		},
 		Retention: RetentionConfig{
 			IncidentMetadataMaxAge: getDuration("INCIDENT_METADATA_MAX_AGE", 90*24*time.Hour),
 			Interval:               getDuration("RETENTION_INTERVAL", 24*time.Hour),
+		},
+		Storage: StorageConfig{
+			BasePath: getenv("STORAGE_BASE_PATH", "/data/incidents"),
+		},
+		Attachment: AttachmentConfig{
+			MaxFiles:       getInt("ATTACHMENT_MAX_FILES", 5),
+			MaxFileBytes:   int64(getInt("ATTACHMENT_MAX_FILE_BYTES", 5<<20)),  // 5 MB
+			MaxImageDim:    getInt("ATTACHMENT_MAX_IMAGE_DIM", 4096),
+			MaxMemoryParse: int64(getInt("ATTACHMENT_PARSE_MEMORY", 10<<20)),   // 10 MB
 		},
 	}
 
@@ -200,6 +271,33 @@ func getBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// parseFeedURLs lee NEWS_FEED_URLS (CSV) o, si no está, devuelve un set
+// curado de 4 fuentes:
+//   - The Hacker News (EN, internacional, técnico)
+//   - WeLiveSecurity / ESET (ES, técnico, calidad alta)
+//   - cybersecuritynews.es (ES, actualidad)
+//   - impactotic.co (Colombia, contexto local)
+//
+// Si la variable existe pero queda vacía tras parsear, se usa también el
+// default — es más seguro tener noticias que un endpoint roto.
+func parseFeedURLs() []string {
+	defaults := []string{
+		"https://feeds.feedburner.com/TheHackersNews",
+		"https://feeds.feedburner.com/welivesecurity",
+		"https://cybersecuritynews.es/feed/",
+		"https://impactotic.co/ciber-seguridad/feed/",
+	}
+	v, ok := os.LookupEnv("NEWS_FEED_URLS")
+	if !ok {
+		return defaults
+	}
+	urls := parseCSV(v)
+	if len(urls) == 0 {
+		return defaults
+	}
+	return urls
 }
 
 // parseAllowedOrigins distingue tres casos para ALLOWED_ORIGINS:

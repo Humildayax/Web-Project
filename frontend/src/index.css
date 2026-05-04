@@ -1,295 +1,110 @@
-/* =========================================================
-   Tema oscuro — paleta basada en slate (Tailwind-like).
-   Toda la app lee de estas variables, así que cambiar el tema
-   es cuestión de modificar :root.
-   ========================================================= */
+/* =====================================================================
+   Tema Bodytech sobre Bootstrap 5.3.
+   Solo overrides de variables de Bootstrap + utilidades muy puntuales.
+   ===================================================================== */
+
 :root {
-  --bg: #0f172a;          /* slate-900 */
-  --surface: #1e293b;     /* slate-800 */
-  --surface-2: #334155;   /* slate-700 */
-  --border: #334155;
-  --text: #e2e8f0;        /* slate-200 */
-  --text-muted: #94a3b8;  /* slate-400 */
-  --accent: #3b82f6;      /* blue-500 */
-  --accent-hover: #60a5fa;
-  --success: #22c55e;
-  --error: #ef4444;
-  --radius: 8px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  /* Naranja Bodytech como primario. */
+  --bs-primary: #ff6900;
+  --bs-primary-rgb: 255, 105, 0;
+
+  /* Negro como color de texto fuerte; gris pizarra para superficies. */
+  --bs-body-color: #1a1a1a;
+  --bs-body-bg: #ffffff;
 }
 
-* {
-  box-sizing: border-box;
+/* Bootstrap 5.3 deja las definiciones de --bs-btn-* dentro de cada .btn-*.
+   Reemplazamos los valores específicos del .btn-primary al naranja Bodytech.
+   Forzamos explícitamente --bs-btn-color blanco en todos los estados para
+   garantizar contraste sobre el fondo naranja. */
+.btn-primary {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #ff6900;
+  --bs-btn-border-color: #ff6900;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #e55e00;
+  --bs-btn-hover-border-color: #cc5400;
+  --bs-btn-focus-shadow-rgb: 255, 105, 0;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #cc5400;
+  --bs-btn-active-border-color: #b34a00;
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: #ff6900;
+  --bs-btn-disabled-border-color: #ff6900;
 }
 
-html,
-body,
-#root {
-  min-height: 100vh;
+.btn-outline-primary {
+  --bs-btn-color: #ff6900;
+  --bs-btn-border-color: #ff6900;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #ff6900;
+  --bs-btn-hover-border-color: #ff6900;
+  --bs-btn-focus-shadow-rgb: 255, 105, 0;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #cc5400;
+  --bs-btn-active-border-color: #cc5400;
+  --bs-btn-disabled-color: #ff6900;
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
+/* Links con el primario actualizado.
+   `:not(.btn):not(.navbar-brand):not(.nav-link)` evita pisar componentes
+   Bootstrap que ya tienen su propio color (botones, nav links, brand). */
+a:not(.btn):not(.navbar-brand):not(.nav-link) {
+  color: var(--bs-primary);
+}
+a:not(.btn):not(.navbar-brand):not(.nav-link):hover {
+  color: #cc5400;
 }
 
-a {
-  color: var(--accent);
-  text-decoration: none;
-}
-a:hover {
-  color: var(--accent-hover);
-}
-a:visited {
-  color: var(--accent);
+/* Inputs con focus naranja en lugar de azul. */
+.form-control:focus,
+.form-select:focus {
+  border-color: #ffb380;
+  box-shadow: 0 0 0 0.2rem rgba(255, 105, 0, 0.25);
 }
 
-h1,
-h2,
-h3 {
-  margin: 0 0 1rem;
-  letter-spacing: -0.01em;
-}
-h1 { font-size: 1.75rem; font-weight: 600; }
-h2 { font-size: 1.25rem; font-weight: 600; }
-h3 { font-size: 1.05rem; font-weight: 600; }
+/* ==========================================================
+   Utilidades específicas del portal.
+   ========================================================== */
 
-code {
-  background: var(--surface-2);
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-  font-size: 0.9em;
+/* Logo en el navbar — ancho fijo, alto auto. El SVG ya es vectorial. */
+.brand-logo {
+  height: 32px;
+  width: auto;
 }
 
-/* ===================== LAYOUT ===================== */
-
-.app {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.85rem 2rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  box-shadow: var(--shadow);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  color: var(--text);
-  font-weight: 600;
-}
-.brand:hover {
-  color: var(--text);
-}
-
-/* Espacio reservado para el logo de la empresa.
-   Reemplaza el <div className="logo-slot"> por un <img className="logo-img" src="/logo.svg" />. */
-.logo-slot {
-  width: 40px;
-  height: 40px;
-  background: var(--surface-2);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  letter-spacing: 0.15em;
-  flex-shrink: 0;
-}
-
-.logo-img {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  border-radius: var(--radius);
-  flex-shrink: 0;
-}
-
-.brand-name {
-  font-size: 1.05rem;
-}
-
-.nav {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.nav-link {
-  padding: 0.45rem 0.85rem;
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  transition: background 0.15s, color 0.15s;
-}
-.nav-link:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-.nav-link-active {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.container {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 2rem;
-  width: 100%;
-  flex: 1;
-}
-
-/* ===================== CARDS ===================== */
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.25rem 1.5rem;
-}
-.card + .card {
-  margin-top: 0.75rem;
-}
-
-.card-title {
-  margin: 0 0 0.4rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-.card-title a {
-  color: var(--text);
-}
-.card-title a:hover {
-  color: var(--accent);
-}
-.card-meta {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-/* ===================== FORM ===================== */
-
-.field {
-  margin-bottom: 1.1rem;
-}
-.field:last-of-type {
-  margin-bottom: 1.5rem;
-}
-
-.label {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 500;
-  margin-bottom: 0.4rem;
-  color: var(--text);
-}
-
-.input,
-.textarea {
-  width: 100%;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.6rem 0.8rem;
-  font-family: inherit;
-  font-size: 0.95rem;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.input:focus,
-.textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-}
-.textarea {
-  resize: vertical;
-  min-height: 8rem;
-  font-family: inherit;
-}
-
-.field-hint {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-top: 0.3rem;
-}
-
-/* Contador discreto al final del field-hint, monoespaciado para que el
-   ancho no salte cuando cambia el número. */
-.char-count {
-  float: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.button {
-  background: var(--accent);
-  color: white;
-  border: none;
-  padding: 0.65rem 1.3rem;
-  border-radius: var(--radius);
-  font-weight: 500;
-  cursor: pointer;
-  font-size: 0.95rem;
-  transition: background 0.15s;
-}
-.button:hover {
-  background: var(--accent-hover);
-}
-.button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* ===================== ALERTS ===================== */
-
-.alert {
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius);
-  margin-bottom: 1.25rem;
-  border: 1px solid;
-  font-size: 0.9rem;
-}
-.alert-success {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: var(--success);
-  color: #86efac;
-}
-.alert-error {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: var(--error);
-  color: #fca5a5;
-}
-
-.empty {
-  color: var(--text-muted);
-  padding: 2rem;
-  text-align: center;
-  font-size: 0.95rem;
-}
-
-/* ===================== PDF ===================== */
-
+/* Visor PDF de la página de políticas. */
 .pdf-frame {
   width: 100%;
   height: 75vh;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+}
+
+/* Hero de la landing con fondo negro y texto blanco para contraste fuerte. */
+.hero-dark {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  color: #ffffff;
+}
+/* Naranja más claro para links inline sobre el fondo oscuro (mejor contraste
+   WCAG). Excluimos botones: el .btn-primary ya tiene su propio color blanco
+   y el selector .hero-dark a tendría specificidad mayor que .btn. */
+.hero-dark a:not(.btn) {
+  color: #ff8533;
+}
+
+/* Cards de navegación de la landing — un toque de hover sin alarde. */
+.nav-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border-top: 3px solid var(--bs-primary);
+}
+.nav-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+}
+
+/* Contador discreto en field-hint, sin saltos de ancho al cambiar. */
+.char-count {
+  float: right;
+  font-variant-numeric: tabular-nums;
 }

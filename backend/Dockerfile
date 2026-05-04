@@ -37,6 +37,18 @@ RUN apk add --no-cache \
 WORKDIR /app
 COPY --from=builder /out/api /app/api
 
+# Pre-creamos el dir donde van los adjuntos y le damos ownership al user
+# `app` ANTES del USER app. Esto importa: cuando Docker monta un volumen
+# nombrado VACÍO sobre /data/incidents, copia el dir (permisos incluidos)
+# al volumen — así el user `app` puede escribir.
+#
+# Si el volumen YA EXISTE de un run previo (con dueño root), Docker NO
+# pisa los permisos: hay que borrar el volumen y recrearlo. Comando:
+#   docker compose down
+#   docker volume rm web-project_attachments_data   (ajustar prefijo)
+#   docker compose up -d --build
+RUN mkdir -p /data/incidents && chown -R app:app /data
+
 USER app
 EXPOSE 8080
 

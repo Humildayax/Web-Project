@@ -11,7 +11,13 @@ import (
 
 type Querier interface {
 	ClaimPendingSync(ctx context.Context, arg ClaimPendingSyncParams) ([]Incident, error)
+	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (IncidentAttachment, error)
 	CreateIncident(ctx context.Context, arg CreateIncidentParams) (Incident, error)
+	ListAttachmentsByIncident(ctx context.Context, incidentID string) ([]IncidentAttachment, error)
+	ListAttachmentsPendingJiraUpload(ctx context.Context, limit int32) ([]ListAttachmentsPendingJiraUploadRow, error)
+	ListAttachmentsPurgeable(ctx context.Context, arg ListAttachmentsPurgeableParams) ([]IncidentAttachment, error)
+	MarkAttachmentPurged(ctx context.Context, id string) error
+	MarkAttachmentUploadedToJira(ctx context.Context, id string) error
 	MarkIncidentSyncFailed(ctx context.Context, id string) error
 	MarkIncidentSynced(ctx context.Context, arg MarkIncidentSyncedParams) error
 	PurgeOldMetadata(ctx context.Context, createdAt time.Time) (int64, error)

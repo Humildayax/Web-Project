@@ -7,6 +7,7 @@ sql:
     # agregue una migración, sumá su .up.sql a esta lista.
     schema:
       - "migrations/00001_init.up.sql"
+      - "migrations/00002_attachments.up.sql"
     gen:
       go:
         package: "db"

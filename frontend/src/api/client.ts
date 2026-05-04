@@ -20,20 +20,26 @@ export class ApiError extends Error {
 /**
  * request es el wrapper único de fetch. Centraliza:
  *   - baseURL
- *   - headers JSON por defecto
+ *   - headers JSON por defecto (no se aplican a FormData)
  *   - manejo de errores tipado (ApiError)
+ *
+ * Si el body es FormData, NO seteamos Content-Type: el browser lo arma con
+ * el boundary correcto. Forzar application/json en multipart rompe el parser.
  *
  * Ningún módulo fuera de `api/` debería usar fetch directo.
  */
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...init.headers,
-    },
-  })
+  const isFormData = init.body instanceof FormData
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...((init.headers as Record<string, string>) ?? {}),
+  }
+  if (!isFormData && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers })
 
   if (!res.ok) {
     const raw = await res.text()

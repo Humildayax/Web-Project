@@ -56,9 +56,26 @@ services:
       JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
       JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-}
       JIRA_ISSUE_TYPE: ${JIRA_ISSUE_TYPE:-Task}
+      # Campos opcionales del ticket (se aplican via PUT post-create).
+      # Si no los seteás en .env, llegan vacíos y se omiten del payload.
+      JIRA_ASSIGNEE_ACCOUNT_ID: ${JIRA_ASSIGNEE_ACCOUNT_ID:-}
+      JIRA_REPORTER_ACCOUNT_ID: ${JIRA_REPORTER_ACCOUNT_ID:-}
+      JIRA_PRIORITY_NAME: ${JIRA_PRIORITY_NAME:-}
+      JIRA_PARENT_ID: ${JIRA_PARENT_ID:-}
+      JIRA_START_DATE_FIELD_ID: ${JIRA_START_DATE_FIELD_ID:-}
+      # Epic Link (solo Classic Software).
+      JIRA_EPIC_LINK_FIELD_ID: ${JIRA_EPIC_LINK_FIELD_ID:-}
+      JIRA_EPIC_LINK_VALUE: ${JIRA_EPIC_LINK_VALUE:-}
+      # Cuántos adjuntos sube el worker a JIRA por tick.
+      JIRA_ATTACHMENT_BATCH_SIZE: ${JIRA_ATTACHMENT_BATCH_SIZE:-20}
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      # Adjuntos de incidentes. Volumen nombrado para que sobreviva a
+      # `docker compose down` (no a `make clean`, que sí lo borra).
+      # Permisos 0o750 los maneja el binario al hacer MkdirAll.
+      - attachments_data:/data/incidents
     networks:
       - security-network
     # Sin `ports:` -> backend NO se expone al host. Se accede solo
@@ -84,3 +101,4 @@ networks:
 
 volumes:
   postgres_data:
+  attachments_data:

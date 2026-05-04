@@ -8,12 +8,22 @@
 
 // ---- Incidentes ----
 
-// POST /api/incidents
-// Espejo de dto.CreateIncidentRequest
+// POST /api/incidents (multipart/form-data)
+// Campos de texto + attachments[] como File array (0..5).
 export interface CreateIncidentRequest {
   title: string
   description: string
   author?: string
+  attachments?: File[]
+}
+
+// Espejo de dto.AttachmentResponse
+export interface AttachmentResponse {
+  id: string
+  filename_original: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
 }
 
 // Respuesta 201 de POST /api/incidents
@@ -26,6 +36,7 @@ export interface IncidentResponse {
   created_at: string           // ISO timestamp
   jira_sync: boolean
   jira_issue_key?: string
+  attachments?: AttachmentResponse[]
 }
 
 // ---- Noticias ----

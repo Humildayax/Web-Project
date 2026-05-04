@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"security-portal/internal/news"
 	"security-portal/internal/repository"
 	"security-portal/internal/services"
+	"security-portal/internal/storage"
 	"security-portal/migrations"
 
 	"github.com/go-chi/chi/v5"
@@ -74,7 +76,13 @@ func run() error {
 
 	jiraClient := setupJiraClient(cfg)
 
-	deps := wireDependencies(cfg, pool, jiraClient)
+	store, err := storage.NewLocal(cfg.Storage.BasePath)
+	if err != nil {
+		return fmt.Errorf("storage: %w", err)
+	}
+	slog.Info("storage local listo", "base_path", cfg.Storage.BasePath)
+
+	deps := wireDependencies(cfg, pool, jiraClient, store)
 	go deps.jiraWorker.Run(ctx)
 	if deps.retentionWorker != nil {
 		go deps.retentionWorker.Run(ctx)
@@ -95,11 +103,43 @@ func setupDB(ctx context.Context, cfg config.Config) (*pgxpool.Pool, error) {
 
 func setupJiraClient(cfg config.Config) jira.Client {
 	if cfg.Jira.Enabled {
-		slog.Info("jira habilitado", "base_url", cfg.Jira.BaseURL, "project", cfg.Jira.ProjectKey)
+		slog.Info("jira habilitado",
+			"base_url", cfg.Jira.BaseURL,
+			"project", cfg.Jira.ProjectKey,
+			"issue_type", cfg.Jira.IssueType,
+			"optional_fields", configuredJiraOptionals(cfg.Jira),
+		)
 		return jira.NewHTTPClient(cfg.Jira)
 	}
 	slog.Warn("jira deshabilitado (modo dev)")
 	return jira.NewNoopClient()
+}
+
+// configuredJiraOptionals lista las KEYS de los campos opcionales que el
+// cliente JIRA va a aplicar via PUT post-create. Si la lista llega vacía
+// al log de arranque, las variables del .env no están llegando al
+// contenedor (chequear docker-compose environment).
+func configuredJiraOptionals(j config.JiraConfig) []string {
+	var out []string
+	if j.AssigneeAccountID != "" {
+		out = append(out, "assignee")
+	}
+	if j.ReporterAccountID != "" {
+		out = append(out, "reporter")
+	}
+	if j.PriorityName != "" {
+		out = append(out, "priority")
+	}
+	if j.ParentID != "" {
+		out = append(out, "parent")
+	}
+	if j.EpicLinkFieldID != "" && j.EpicLinkValue != "" {
+		out = append(out, "epic_link")
+	}
+	if j.StartDateFieldID != "" {
+		out = append(out, "start_date")
+	}
+	return out
 }
 
 // dependencies agrupa lo que arma run() y consumen router/workers.
@@ -110,21 +150,42 @@ type dependencies struct {
 	retentionWorker *services.RetentionWorker // nil si retention deshabilitado
 }
 
-func wireDependencies(cfg config.Config, pool *pgxpool.Pool, jiraClient jira.Client) dependencies {
+func wireDependencies(cfg config.Config, pool *pgxpool.Pool, jiraClient jira.Client, store storage.Storage) dependencies {
 	incidentRepo := repository.NewIncidentRepository(pool, cfg.DB.OpTimeout)
-	incidentSvc := services.NewIncidentService(incidentRepo, jiraClient)
+	attachmentRepo := repository.NewAttachmentRepository(pool, cfg.DB.OpTimeout)
+	incidentSvc := services.NewIncidentService(incidentRepo, attachmentRepo, store, jiraClient)
 
-	newsProvider := news.NewRSSProvider(cfg.News.FeedURL, cfg.News.Limit)
+	newsProvider := news.NewRSSProvider(cfg.News.FeedURLs, cfg.News.LimitPerSource)
 	newsSvc := services.NewNewsService(newsProvider, cfg.News.CacheTTL)
 
 	deps := dependencies{
-		incidentH:  handlers.NewIncidentHandler(incidentSvc, cfg.HTTP.MaxBodyBytes),
-		newsH:      handlers.NewNewsHandler(newsSvc),
-		jiraWorker: services.NewJiraRetryWorker(incidentRepo, jiraClient, cfg.Jira.RetryInterval, cfg.Jira.BaseBackoff, cfg.Jira.MaxRetries),
+		incidentH: handlers.NewIncidentHandler(
+			incidentSvc,
+			cfg.HTTP.MaxBodyBytes,
+			handlers.AttachmentLimits{
+				MaxFiles:       cfg.Attachment.MaxFiles,
+				MaxFileBytes:   cfg.Attachment.MaxFileBytes,
+				MaxImageDim:    cfg.Attachment.MaxImageDim,
+				MaxMemoryParse: cfg.Attachment.MaxMemoryParse,
+			},
+		),
+		newsH: handlers.NewNewsHandler(newsSvc),
+		jiraWorker: services.NewJiraRetryWorker(
+			incidentRepo,
+			attachmentRepo,
+			store,
+			jiraClient,
+			cfg.Jira.RetryInterval,
+			cfg.Jira.BaseBackoff,
+			cfg.Jira.MaxRetries,
+			cfg.Jira.AttachmentBatchSize,
+		),
 	}
 	if cfg.Retention.IncidentMetadataMaxAge > 0 {
 		deps.retentionWorker = services.NewRetentionWorker(
 			incidentRepo,
+			attachmentRepo,
+			store,
 			cfg.Retention.IncidentMetadataMaxAge,
 			cfg.Retention.Interval,
 		)

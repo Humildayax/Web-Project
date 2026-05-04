@@ -4,8 +4,8 @@
 
 Portal interno con tres secciones:
 
-- **Noticias**: feed RSS externo cacheado con TTL.
-- **Reportar**: formulario que crea un incidente en Postgres y abre un ticket en JIRA (resiliente a JIRA caído).
+- **Noticias**: 4 feeds RSS (curables vía `NEWS_FEED_URLS`) consumidos en paralelo, cacheados con TTL y ordenados por fecha descendente.
+- **Reportar**: formulario que crea un incidente en Postgres y abre un ticket en JIRA (resiliente a JIRA caído). Soporta hasta 5 imágenes adjuntas (JPG/PNG/WEBP, 5 MB c/u) que se validan, re-encodean (limpia EXIF + anula polyglots) y guardan en filesystem.
 - **Políticas**: visor de PDF estático servido desde `frontend/public/policies.pdf`.
 
 Stack: Go (chi + pgx + sqlc) + React (Vite + TypeScript) + Postgres + Nginx, todo orquestado con Docker Compose.
@@ -71,6 +71,10 @@ El backend lee `.env` desde el cwd y, si no lo encuentra, sube un nivel — así
 ## Decisiones de diseño que conviene conocer
 
 - **DB-first ante JIRA caído**: `POST /api/incidents` siempre persiste primero en Postgres. Si la llamada a JIRA falla, el cliente recibe 201 y un worker (`internal/services/jira_retry_worker.go`) reintenta de fondo con backoff exponencial. Las consultas usan `FOR UPDATE SKIP LOCKED` así que es seguro correr varias réplicas del backend.
+- **Mapeo del ticket JIRA**: el payload de `POST /rest/api/3/issue` se arma con un map dinámico — los campos opcionales (assignee, reporter, priority, parent, start date) **se omiten si la variable de entorno no está seteada**. Esto permite ir activando uno por uno mientras se ajusta la instancia destino (n8n hace algo equivalente con sus dropdowns). El custom field "Start date" se mapea con `incident.created_at` formateado como `YYYY-MM-DD`.
+- **Adjuntos seguros por diseño**: el endpoint pasa por (1) `MaxBytesReader` y `client_max_body_size` de nginx, (2) whitelist por **magic bytes** (no por Content-Type), (3) decode + cap de dimensiones (anti compression bomb), (4) **re-encode** a JPEG/PNG (anula payloads polyglot, elimina EXIF), (5) filename de disco generado server-side (`<uuid>.<ext>`, anti path-traversal). El binario se guarda en un volumen Docker no expuesto por nginx; el filename original sanitizado solo vive como metadata legible.
+- **Adjuntos a JIRA**: el `JiraRetryWorker` tiene dos fases por tick. Después de sincronizar incidentes pendientes, lee del disco los adjuntos cuyo incidente ya tiene `jira_issue_key` y los sube vía `POST /rest/api/3/issue/{key}/attachments` (multipart, header `X-Atlassian-Token: no-check`). Marca `uploaded_to_jira_at` solo tras éxito. La semántica es **at-least-once**: si crasheamos entre upload-OK y mark-uploaded, el siguiente tick sube de nuevo (JIRA acepta el duplicado). Para *exactly-once* haría falta lock distribuido — fuera de scope a esta escala.
+- **Retención de binarios**: el `RetentionWorker` ahora tiene dos fases. Además de nullear la metadata PII de incidentes viejos, lista adjuntos con `created_at < cutoff`, borra el binario del disco y marca `purged_at` en la fila DB (la fila se conserva como audit: cuántos había, qué hashes, qué nombres). Si un adjunto cumple TTL sin haber subido a JIRA, se loggea WARN antes de borrarlo — la política de privacidad pesa más que la evidencia.
 - **Migraciones en runtime**: el binario corre `golang-migrate` al arrancar (var `MIGRATE_ON_START`, default `true`). Postgres en compose ya no monta `init.sql`. Para crear una nueva: `cd backend && make migrate-create name=algo`.
 - **Retención de PII**: `internal/services/retention_worker.go` pone `metadata = NULL` en incidentes con `created_at < NOW() - INCIDENT_METADATA_MAX_AGE` (default 90d). La fila se conserva, solo desaparece la IP/UA del reporte.
 - **Rate-limiting en dos capas**: nginx con `limit_req` (10r/s burst 20 sobre `/api/`) y el backend con `httprate` por IP solo en `POST /api/incidents` (10/min default). El IP se obtiene de `X-Real-IP` (que setea el propio nginx), no del primer valor de `X-Forwarded-For`.

@@ -20,3 +20,16 @@ type Incident struct {
 	LastSyncAttempt *time.Time
 	Metadata        []byte
 }
+
+type IncidentAttachment struct {
+	ID                string
+	IncidentID        string
+	FilenameOriginal  string
+	FilenameStored    string
+	MimeType          string
+	SizeBytes         int64
+	Sha256            string
+	CreatedAt         time.Time
+	UploadedToJiraAt  *time.Time
+	PurgedAt          *time.Time
+}
