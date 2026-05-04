@@ -49,6 +49,13 @@ jobs:
         with:
           version: latest
           working-directory: backend
+          # Compila golangci-lint con la toolchain de Go que ya instaló
+          # setup-go (1.26). Con `binary` (default) bajaría un release
+          # pre-compilado que puede estar construido con una Go vieja
+          # y rechazar correr contra módulos que apunten a una más nueva
+          # ("Go language version (go1.X) used to build golangci-lint
+          # is lower than the targeted Go version (1.Y)").
+          install-mode: goinstall
 
   frontend:
     name: Frontend (TypeScript)
